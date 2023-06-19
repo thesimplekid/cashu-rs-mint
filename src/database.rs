@@ -1,0 +1,226 @@
+use std::{fs, path::PathBuf, sync::Arc};
+
+use anyhow::{bail, Result};
+use cashu::ecash::Proofs;
+use cashu::mint::Sha256;
+use cashu::{ecash::Proof, keyset};
+use log::debug;
+use redb::{Database, ReadableTable, TableDefinition};
+use tokio::sync::Mutex;
+
+use crate::{ln::InvoiceInfo, types::KeysetInfo};
+
+const KEYSETS: TableDefinition<&str, &str> = TableDefinition::new("keysets");
+
+const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
+
+// Key: Random Hash
+// Value Serialized Invoice Info
+const INVOICES: TableDefinition<&str, &str> = TableDefinition::new("invoices");
+
+// Key: Payment Hash
+// Value: Random Hash
+const HASH: TableDefinition<&str, &str> = TableDefinition::new("hash");
+
+// KEY: Secret
+// VALUE: seralized proof
+const USED_PROOFS: TableDefinition<&[u8], &str> = TableDefinition::new("used_proofs");
+
+#[derive(Debug, Clone)]
+pub struct Db {
+    db: Arc<Mutex<Database>>,
+}
+
+impl Db {
+    /// Init Database
+    pub async fn new(path: PathBuf) -> Result<Self> {
+        if let Err(_err) = fs::create_dir_all(&path) {}
+        let db_path = path.join("cashu-mint-rs.redb");
+        let database = Database::create(db_path)?;
+
+        let write_txn = database.begin_write()?;
+        {
+            let _ = write_txn.open_table(KEYSETS)?;
+            let _ = write_txn.open_table(CONFIG)?;
+            let _ = write_txn.open_table(INVOICES)?;
+            let _ = write_txn.open_table(HASH)?;
+            let _ = write_txn.open_table(USED_PROOFS)?;
+        }
+        write_txn.commit()?;
+
+        Ok(Self {
+            db: Arc::new(Mutex::new(database)),
+        })
+    }
+
+    pub async fn add_keyset(&self, keyset_info: &KeysetInfo) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut keysets_table = write_txn.open_table(KEYSETS)?;
+
+            keysets_table.insert(
+                keyset_info.keyset.id.to_string().as_str(),
+                keyset_info.as_json()?.as_str(),
+            )?;
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+
+    pub async fn get_keyset_info(&self, keyset_id: keyset::Id) -> Result<KeysetInfo> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let keysets_table = read_txn.open_table(KEYSETS)?;
+
+        let keyset_info = match keysets_table.get(keyset_id.to_string().as_str())? {
+            Some(contact) => serde_json::from_str(contact.value())?,
+            None => bail!("Keyset Not Found"),
+        };
+
+        Ok(keyset_info)
+    }
+
+    pub async fn set_active_keyset(&self, keyset_id: keyset::Id) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut config_table = write_txn.open_table(CONFIG)?;
+
+            config_table.insert("active_keyset", keyset_id.to_string().as_str())?;
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+
+    pub async fn get_active_keyset(&self) -> Result<Option<keyset::Id>> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let keysets_table = read_txn.open_table(CONFIG)?;
+
+        let keyset_info = match keysets_table.get("active_keyset")? {
+            Some(contact) => Some(keyset::Id::try_from_base64(contact.value())?),
+            None => None,
+        };
+
+        Ok(keyset_info)
+    }
+
+    pub async fn set_last_pay_index(&self, last_pay_index: u64) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut config_table = write_txn.open_table(CONFIG)?;
+
+            config_table.insert("last_pay_index", last_pay_index.to_string().as_str())?;
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+
+    pub async fn get_last_pay_index(&self) -> Result<u64> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let config_table = read_txn.open_table(CONFIG)?;
+
+        let last_pay_index = match config_table.get("last_pay_index")? {
+            Some(contact) => contact.value().parse()?,
+            None => 0,
+        };
+
+        Ok(last_pay_index)
+    }
+
+    pub async fn add_invoice(&self, invoice_info: &InvoiceInfo) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut invoices_table = write_txn.open_table(INVOICES)?;
+
+            invoices_table.insert(
+                invoice_info.hash.to_string().as_str(),
+                invoice_info.as_json()?.as_str(),
+            )?;
+
+            let mut hash_table = write_txn.open_table(HASH)?;
+            hash_table.insert(
+                invoice_info.payment_hash.to_string().as_str(),
+                invoice_info.hash.to_string().as_str(),
+            )?;
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+
+    pub async fn get_invoice_info(&self, hash: &Sha256) -> Result<InvoiceInfo> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let invoices_table = read_txn.open_table(INVOICES)?;
+
+        let invoices_info = match invoices_table.get(hash.to_string().as_str())? {
+            Some(invoice) => serde_json::from_str(invoice.value())?,
+            None => bail!("Invoice Not Found"),
+        };
+
+        Ok(invoices_info)
+    }
+
+    pub async fn get_invoice_info_by_payment_hash(
+        &self,
+        payment_hash: &Sha256,
+    ) -> Result<InvoiceInfo> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+
+        let hash_table = read_txn.open_table(HASH)?;
+
+        let hash = match hash_table.get(payment_hash.to_string().as_str())? {
+            Some(hash) => {
+                let hash = hash.value();
+                hash.to_string()
+            }
+            None => bail!("Hash Mapping not found"),
+        };
+
+        let invoices_table = read_txn.open_table(INVOICES)?;
+
+        let invoices_info = match invoices_table.get(hash.as_str())? {
+            Some(invoice) => serde_json::from_str(invoice.value())?,
+            None => bail!("Invoice Not Found"),
+        };
+
+        Ok(invoices_info)
+    }
+
+    pub async fn add_used_proofs(&self, proofs: &Proofs) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut used_proof_table = write_txn.open_table(USED_PROOFS)?;
+
+            for proof in proofs {
+                used_proof_table.insert(
+                    proof.secret.as_bytes(),
+                    serde_json::to_string(proof)?.as_str(),
+                )?;
+            }
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+}
