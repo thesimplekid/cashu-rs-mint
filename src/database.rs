@@ -1,15 +1,20 @@
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
 use cashu::ecash::Proofs;
+use cashu::keyset;
 use cashu::mint::Sha256;
-use cashu::{ecash::Proof, keyset};
-use log::debug;
+use cashu::secret::Secret;
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
+use crate::ln::{InvoiceStatus, InvoiceTokenStatus};
 use crate::{ln::InvoiceInfo, types::KeysetInfo};
 
+// Key: KeysetId
+// Value: Keyset
 const KEYSETS: TableDefinition<&str, &str> = TableDefinition::new("keysets");
 
 const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
@@ -70,7 +75,27 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_keyset_info(&self, keyset_id: keyset::Id) -> Result<KeysetInfo> {
+    pub async fn get_all_keyset_info(&self) -> Result<HashMap<keyset::Id, KeysetInfo>> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let keysets_table = read_txn.open_table(KEYSETS)?;
+
+        let keysets = keysets_table
+            .iter()?
+            .flatten()
+            .map(|(k, v)| {
+                (
+                    keyset::Id::try_from_base64(k.value()).unwrap(),
+                    serde_json::from_str(v.value()).unwrap(),
+                )
+            })
+            .collect();
+
+        Ok(keysets)
+    }
+
+    pub async fn _get_keyset_info(&self, keyset_id: keyset::Id) -> Result<KeysetInfo> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -98,7 +123,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_active_keyset(&self) -> Result<Option<keyset::Id>> {
+    pub async fn _get_active_keyset(&self) -> Result<Option<keyset::Id>> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -205,6 +230,53 @@ impl Db {
         Ok(invoices_info)
     }
 
+    pub async fn get_pending_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+
+        let invoice_table = read_txn.open_table(HASH)?;
+
+        let pending_invoices = invoice_table
+            .iter()?
+            .flatten()
+            .filter_map(|(k, v)| {
+                let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
+                invoice
+                    .ok()
+                    .filter(|invoice| invoice.status != InvoiceStatus::Unpaid)
+                    .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
+            })
+            .collect::<HashMap<Sha256, InvoiceInfo>>();
+
+        Ok(pending_invoices)
+    }
+
+    pub async fn get_unissued_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+
+        let invoice_table = read_txn.open_table(HASH)?;
+
+        let pending_invoices = invoice_table
+            .iter()?
+            .flatten()
+            .filter_map(|(k, v)| {
+                let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
+                invoice
+                    .ok()
+                    .filter(|invoice| {
+                        invoice.status.eq(&InvoiceStatus::Paid)
+                            && invoice.token_status.eq(&InvoiceTokenStatus::NotIssued)
+                    })
+                    .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
+            })
+            .collect::<HashMap<Sha256, InvoiceInfo>>();
+
+        Ok(pending_invoices)
+    }
+
     pub async fn add_used_proofs(&self, proofs: &Proofs) -> Result<()> {
         let db = self.db.lock().await;
 
@@ -222,5 +294,20 @@ impl Db {
         write_txn.commit()?;
 
         Ok(())
+    }
+
+    pub async fn get_spent_secrets(&self) -> Result<HashSet<Secret>> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+
+        let used_proofs_table = read_txn.open_table(USED_PROOFS)?;
+
+        let used_proofs = used_proofs_table
+            .iter()?
+            .flatten()
+            .map(|(k, _v)| Secret::from_bytes(k.value()))
+            .collect();
+        Ok(used_proofs)
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -7,14 +7,14 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cashu::keyset::Map;
+use cashu::keyset::{mint, Map};
 use cashu::lightning_invoice::Invoice as LnInvoice;
 use cashu::mint::{
     CheckFeesResponse, CheckSpendableResponse, Invoice, KeySetsResponse, MeltResponse, Mint,
     MintResponse, Sha256, SplitResponse,
 };
 use cashu::wallet::{check_fees, check_spendable, melt, split, MintRequest};
-use cashu::Amount;
+use cashu::{keyset, lightning_invoice, secret::Secret, Amount};
 use ln::cln::fee_reserve;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use log::{debug, warn};
@@ -46,15 +46,47 @@ async fn main() -> anyhow::Result<()> {
 
     let db = Db::new(db_path).await.unwrap();
 
-    let cln_socket = settings.ln.path;
+    let cln_socket = utils::expand_path(settings.ln.path.to_str().unwrap()).unwrap();
 
-    let mint = Mint::new(settings.info.secret_key, settings.info.derivation_path, 8);
-    let keyset = mint.active_keyset_pubkeys();
+    let all_keysets = db.get_all_keyset_info().await?;
+
+    let inactive_keysets: HashMap<keyset::Id, keyset::mint::KeySet> = all_keysets
+        .iter()
+        .map(|(k, v)| (k.clone(), v.keyset.clone()))
+        .collect();
+
+    let paid_invoices_info = db.get_unissued_invoices().await?;
+
+    let paid_invoices: HashMap<Sha256, (Amount, lightning_invoice::Invoice)> = paid_invoices_info
+        .iter()
+        .map(|(k, v)| (k.clone(), (v.amount, v.invoice.clone())))
+        .collect();
+
+    let pending_invoices_info = db.get_pending_invoices().await?;
+
+    let pending_invoices: HashMap<Sha256, (Amount, Option<lightning_invoice::Invoice>)> =
+        pending_invoices_info
+            .iter()
+            .map(|(k, v)| (k.clone(), (v.amount, Some(v.invoice.clone()))))
+            .collect();
+
+    let spent_secrets: HashSet<Secret> = db.get_spent_secrets().await?;
+
+    let mint = Mint::new_with_history(
+        settings.info.secret_key,
+        settings.info.derivation_path,
+        8,
+        inactive_keysets,
+        paid_invoices,
+        pending_invoices,
+        spent_secrets,
+    );
+    let keyset = mint.active_keyset();
     db.set_active_keyset(keyset.id).await?;
     let keyset_info = KeysetInfo {
         valid_from: unix_time(),
         valid_to: None,
-        keyset,
+        keyset: mint::KeySet::from(keyset),
     };
     db.add_keyset(&keyset_info).await?;
 

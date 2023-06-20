@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cashu::keyset::KeySet;
+use cashu::keyset::mint::KeySet;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
