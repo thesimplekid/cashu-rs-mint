@@ -55,6 +55,8 @@ pub struct Info {
     pub secret_key: String,
     #[serde(default = "derivation_path_default")]
     pub derivation_path: String,
+    #[serde(default = "max_order_default")]
+    pub max_order: u8,
 }
 
 fn path_default() -> PathBuf {
@@ -65,10 +67,15 @@ fn derivation_path_default() -> String {
     "0/0/0/0".to_string()
 }
 
+fn max_order_default() -> u8 {
+    32
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum LnBackend {
     #[default]
     Cln,
+    Greenlight,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

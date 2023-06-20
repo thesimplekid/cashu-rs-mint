@@ -7,7 +7,7 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cashu::keyset::{mint, Map};
+use cashu::keyset::Map;
 use cashu::lightning_invoice::Invoice as LnInvoice;
 use cashu::mint::{
     CheckFeesResponse, CheckSpendableResponse, Invoice, KeySetsResponse, MeltResponse, Mint,
@@ -16,6 +16,7 @@ use cashu::mint::{
 use cashu::wallet::{check_fees, check_spendable, melt, split, MintRequest};
 use cashu::{keyset, lightning_invoice, secret::Secret, Amount};
 use ln::cln::fee_reserve;
+use ln::greenlight::Greenlight;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,7 @@ use tokio::sync::Mutex;
 use types::KeysetInfo;
 use utils::unix_time;
 
+use crate::config::LnBackend;
 use crate::database::Db;
 use crate::error::Error;
 use crate::ln::cln::Cln;
@@ -52,14 +54,14 @@ async fn main() -> anyhow::Result<()> {
 
     let inactive_keysets: HashMap<keyset::Id, keyset::mint::KeySet> = all_keysets
         .iter()
-        .map(|(k, v)| (k.clone(), v.keyset.clone()))
+        .map(|(k, v)| (*k, v.keyset.clone()))
         .collect();
 
     let paid_invoices_info = db.get_unissued_invoices().await?;
 
     let paid_invoices: HashMap<Sha256, (Amount, lightning_invoice::Invoice)> = paid_invoices_info
         .iter()
-        .map(|(k, v)| (k.clone(), (v.amount, v.invoice.clone())))
+        .map(|(k, v)| (*k, (v.amount, v.invoice.clone())))
         .collect();
 
     let pending_invoices_info = db.get_pending_invoices().await?;
@@ -67,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     let pending_invoices: HashMap<Sha256, (Amount, Option<lightning_invoice::Invoice>)> =
         pending_invoices_info
             .iter()
-            .map(|(k, v)| (k.clone(), (v.amount, Some(v.invoice.clone()))))
+            .map(|(k, v)| (*k, (v.amount, Some(v.invoice.clone()))))
             .collect();
 
     let spent_secrets: HashSet<Secret> = db.get_spent_secrets().await?;
@@ -75,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
     let mint = Mint::new_with_history(
         settings.info.secret_key,
         settings.info.derivation_path,
-        8,
+        settings.info.max_order,
         inactive_keysets,
         paid_invoices,
         pending_invoices,
@@ -86,14 +88,19 @@ async fn main() -> anyhow::Result<()> {
     let keyset_info = KeysetInfo {
         valid_from: unix_time(),
         valid_to: None,
-        keyset: mint::KeySet::from(keyset),
+        keyset,
     };
     db.add_keyset(&keyset_info).await?;
 
     let mint = Arc::new(Mutex::new(mint));
 
-    let ln = Ln {
-        ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone())),
+    let ln = match settings.ln.ln_backend {
+        LnBackend::Cln => Ln {
+            ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone())),
+        },
+        LnBackend::Greenlight => Ln {
+            ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
+        },
     };
 
     let ln_clone = ln.clone();

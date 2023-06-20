@@ -4,9 +4,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 use cashu::{lightning_invoice::Invoice, mint::Sha256, Amount};
 use cln_rpc::model::responses::ListinvoicesInvoicesStatus;
+use gl_client::pb::cln::listinvoices_invoices::ListinvoicesInvoicesStatus as GL_ListInvoiceStatus;
 use serde::{Deserialize, Serialize};
 
 pub mod cln;
+pub mod greenlight;
 
 #[derive(Clone)]
 pub struct Ln {
@@ -32,6 +34,16 @@ impl From<ListinvoicesInvoicesStatus> for InvoiceStatus {
             ListinvoicesInvoicesStatus::UNPAID => Self::Unpaid,
             ListinvoicesInvoicesStatus::PAID => Self::Paid,
             ListinvoicesInvoicesStatus::EXPIRED => Self::Expired,
+        }
+    }
+}
+
+impl From<GL_ListInvoiceStatus> for InvoiceStatus {
+    fn from(status: GL_ListInvoiceStatus) -> Self {
+        match status {
+            GL_ListInvoiceStatus::Unpaid => Self::Unpaid,
+            GL_ListInvoiceStatus::Paid => Self::Paid,
+            GL_ListInvoiceStatus::Expired => Self::Expired,
         }
     }
 }

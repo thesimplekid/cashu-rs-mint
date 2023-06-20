@@ -8,7 +8,7 @@ pub fn unix_time() -> u64 {
 }
 
 pub fn expand_path(path: &str) -> Option<PathBuf> {
-    if path.starts_with("~") {
+    if path.starts_with('~') {
         if let Some(home_dir) = dirs::home_dir().as_mut() {
             let remainder = &path[2..];
             home_dir.push(remainder);
