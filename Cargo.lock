@@ -193,7 +193,6 @@ version = "0.0.2"
 dependencies = [
  "base64 0.21.2",
  "bitcoin 0.30.0",
- "hex",
  "itertools",
  "lightning-invoice",
  "log",

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -41,16 +40,15 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    // TODO: Get from config
-    let db_path = PathBuf::from_str(".")?;
-
     let settings = config::Settings::new(&Some("./config.toml".to_string()));
+
+    let db_path = settings.info.clone().db_path;
 
     let db = Db::new(db_path).await.unwrap();
 
     let cln_socket = settings.ln.path;
 
-    let mint = Mint::new("the-secret", "0/0/0/0", 8);
+    let mint = Mint::new(settings.info.secret_key, settings.info.derivation_path, 8);
     let keyset = mint.active_keyset_pubkeys();
     db.set_active_keyset(keyset.id).await?;
     let keyset_info = KeysetInfo {
@@ -75,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let mint_info = MintInfo::from(settings.info);
+    let mint_info = MintInfo::from(settings.mint_info);
 
     let state = MintState {
         db,
@@ -96,9 +94,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/info", get(get_info))
         .with_state(state);
 
-    let ip = Ipv4Addr::LOCALHOST;
+    let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
 
-    let port = 8085;
+    let port = settings.info.listen_port;
 
     let listen_addr = SocketAddr::new(std::net::IpAddr::V4(ip), port);
 
@@ -156,8 +154,8 @@ struct MintInfo {
     motd: Option<String>,
 }
 
-impl From<config::Info> for MintInfo {
-    fn from(info: config::Info) -> Self {
+impl From<config::MintInfo> for MintInfo {
+    fn from(info: config::MintInfo) -> Self {
         Self {
             name: info.name,
             pubkey: info.pubkey,

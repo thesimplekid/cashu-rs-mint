@@ -26,15 +26,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
+use cashu::Amount;
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Info {
-    pub url: String,
+pub struct MintInfo {
     pub name: Option<String>,
     pub pubkey: Option<String>,
     pub version: Option<String>,
@@ -46,14 +46,44 @@ pub struct Info {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Info {
+    pub url: String,
+    #[serde(default = "path_default")]
+    pub db_path: PathBuf,
+    pub listen_host: String,
+    pub listen_port: u16,
+    pub secret_key: String,
+    #[serde(default = "derivation_path_default")]
+    pub derivation_path: String,
+}
+
+fn path_default() -> PathBuf {
+    PathBuf::from_str(".").unwrap()
+}
+
+fn derivation_path_default() -> String {
+    "0/0/0/0".to_string()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+pub enum LnBackend {
+    #[default]
+    Cln,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
     pub path: PathBuf,
     pub invoice_description: Option<String>,
+    pub ln_backend: LnBackend,
+    pub fee_percent: f64,
+    pub reserve_fee_min: Amount,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub info: Info,
+    pub mint_info: MintInfo,
     pub ln: Ln,
 }
 
@@ -78,7 +108,7 @@ impl Settings {
     ) -> Result<Self, ConfigError> {
         let mut default_config_file_name = dirs::config_dir()
             .ok_or(ConfigError::NotFound("Config Path".to_string()))?
-            .join("cashu-lnurl");
+            .join("cashu-rs-mint");
 
         default_config_file_name.push("config.toml");
         let config: String = match config_file_name {

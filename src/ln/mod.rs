@@ -114,8 +114,3 @@ pub trait LnProcessor: Send + Sync {
 
     async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus>;
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub enum Processor {
-    Cln,
-}
