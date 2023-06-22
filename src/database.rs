@@ -3,8 +3,7 @@ use std::str::FromStr;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
-use cashu_crab::keyset;
-use cashu_crab::types::Proofs;
+use cashu_crab::nuts::nut00::Proofs;
 use cashu_crab::Sha256;
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;

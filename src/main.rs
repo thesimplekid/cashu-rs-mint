@@ -11,13 +11,16 @@ use axum_macros::debug_handler;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use cashu_crab::amount::Amount;
-use cashu_crab::types::{
-    CheckFeesRequest, CheckFeesResponse, CheckSpendableRequest, CheckSpendableResponse,
-    MeltRequest, MeltResponse, MintRequest, PostMintResponse, RequestMintResponse, SplitPayload,
-    SplitRequest, SplitResponse,
-};
 
-use cashu_crab::{keyset, mint::Mint, Sha256};
+use cashu_crab::nuts::nut01::Keys;
+use cashu_crab::nuts::nut03::RequestMintResponse;
+use cashu_crab::nuts::nut04::{MintRequest, PostMintResponse};
+use cashu_crab::nuts::nut05::{CheckFeesRequest, CheckFeesResponse};
+use cashu_crab::nuts::nut06::{SplitRequest, SplitResponse};
+use cashu_crab::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
+use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
+use cashu_crab::nuts::*;
+use cashu_crab::{mint::Mint, Sha256};
 use ln::cln::fee_reserve;
 use ln::greenlight::Greenlight;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
@@ -55,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
 
     let all_keysets = db.get_all_keyset_info().await?;
 
-    let inactive_keysets: HashMap<String, keyset::mint::KeySet> = all_keysets
+    let inactive_keysets: HashMap<String, nut02::mint::KeySet> = all_keysets
         .iter()
         .map(|(k, v)| (k.to_owned(), v.keyset.clone()))
         .collect();
@@ -138,7 +141,7 @@ struct MintState {
     mint_info: MintInfo,
 }
 
-async fn get_keys(State(state): State<MintState>) -> Result<Json<keyset::Keys>, StatusCode> {
+async fn get_keys(State(state): State<MintState>) -> Result<Json<Keys>, StatusCode> {
     let mint = state.mint.lock().await;
 
     let keys = mint.active_keyset_pubkeys();
@@ -192,7 +195,7 @@ impl From<config::MintInfo> for MintInfo {
     }
 }
 
-async fn get_keysets(State(state): State<MintState>) -> Result<Json<keyset::Response>, StatusCode> {
+async fn get_keysets(State(state): State<MintState>) -> Result<Json<nut02::Response>, StatusCode> {
     let mint = state.mint.lock().await;
 
     Ok(Json(mint.keysets()))
