@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use cashu::Amount;
+use cashu_crab::Amount;
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
@@ -39,7 +39,7 @@ pub struct MintInfo {
     pub pubkey: Option<String>,
     pub version: Option<String>,
     pub description: Option<String>,
-    pub descrption_long: Option<String>,
+    pub description_long: Option<String>,
     pub contact: Option<HashMap<String, String>>,
     pub nuts: Option<Vec<String>>,
     pub motd: Option<String>,

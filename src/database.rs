@@ -3,15 +3,15 @@ use std::str::FromStr;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
-use cashu::ecash::Proofs;
-use cashu::keyset;
-use cashu::mint::Sha256;
-use cashu::secret::Secret;
+use cashu_crab::keyset;
+use cashu_crab::types::Proofs;
+use cashu_crab::Sha256;
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
+use crate::ln::InvoiceInfo;
 use crate::ln::{InvoiceStatus, InvoiceTokenStatus};
-use crate::{ln::InvoiceInfo, types::KeysetInfo};
+use crate::types::KeysetInfo;
 
 // Key: KeysetId
 // Value: Keyset
@@ -28,7 +28,7 @@ const INVOICES: TableDefinition<&str, &str> = TableDefinition::new("invoices");
 const HASH: TableDefinition<&str, &str> = TableDefinition::new("hash");
 
 // KEY: Secret
-// VALUE: seralized proof
+// VALUE: serialized proof
 const USED_PROOFS: TableDefinition<&[u8], &str> = TableDefinition::new("used_proofs");
 
 #[derive(Debug, Clone)]
@@ -75,7 +75,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_all_keyset_info(&self) -> Result<HashMap<keyset::Id, KeysetInfo>> {
+    pub async fn get_all_keyset_info(&self) -> Result<HashMap<String, KeysetInfo>> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -86,7 +86,7 @@ impl Db {
             .flatten()
             .map(|(k, v)| {
                 (
-                    keyset::Id::try_from_base64(k.value()).unwrap(),
+                    k.value().to_string(),
                     serde_json::from_str(v.value()).unwrap(),
                 )
             })
@@ -95,7 +95,7 @@ impl Db {
         Ok(keysets)
     }
 
-    pub async fn _get_keyset_info(&self, keyset_id: keyset::Id) -> Result<KeysetInfo> {
+    pub async fn _get_keyset_info(&self, keyset_id: &str) -> Result<KeysetInfo> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -109,7 +109,7 @@ impl Db {
         Ok(keyset_info)
     }
 
-    pub async fn set_active_keyset(&self, keyset_id: keyset::Id) -> Result<()> {
+    pub async fn set_active_keyset(&self, keyset_id: &str) -> Result<()> {
         let db = self.db.lock().await;
 
         let write_txn = db.begin_write()?;
@@ -123,14 +123,14 @@ impl Db {
         Ok(())
     }
 
-    pub async fn _get_active_keyset(&self) -> Result<Option<keyset::Id>> {
+    pub async fn _get_active_keyset(&self) -> Result<Option<String>> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
         let keysets_table = read_txn.open_table(CONFIG)?;
 
         let keyset_info = match keysets_table.get("active_keyset")? {
-            Some(contact) => Some(keyset::Id::try_from_base64(contact.value())?),
+            Some(contact) => Some(contact.value().to_string()),
             None => None,
         };
 
@@ -164,7 +164,6 @@ impl Db {
 
         Ok(last_pay_index)
     }
-
     pub async fn add_invoice(&self, invoice_info: &InvoiceInfo) -> Result<()> {
         let db = self.db.lock().await;
 
@@ -230,53 +229,54 @@ impl Db {
         Ok(invoices_info)
     }
 
-    pub async fn get_pending_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
-        let db = self.db.lock().await;
+    /*
+        pub async fn get_pending_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
+            let db = self.db.lock().await;
 
-        let read_txn = db.begin_read()?;
+            let read_txn = db.begin_read()?;
 
-        let invoice_table = read_txn.open_table(HASH)?;
+            let invoice_table = read_txn.open_table(HASH)?;
 
-        let pending_invoices = invoice_table
-            .iter()?
-            .flatten()
-            .filter_map(|(k, v)| {
-                let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
-                invoice
-                    .ok()
-                    .filter(|invoice| invoice.status != InvoiceStatus::Unpaid)
-                    .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
-            })
-            .collect::<HashMap<Sha256, InvoiceInfo>>();
+            let pending_invoices = invoice_table
+                .iter()?
+                .flatten()
+                .filter_map(|(k, v)| {
+                    let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
+                    invoice
+                        .ok()
+                        .filter(|invoice| invoice.status != InvoiceStatus::Unpaid)
+                        .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
+                })
+                .collect::<HashMap<Sha256, InvoiceInfo>>();
 
-        Ok(pending_invoices)
-    }
+            Ok(pending_invoices)
+        }
 
-    pub async fn get_unissued_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
-        let db = self.db.lock().await;
+        pub async fn get_unissued_invoices(&self) -> Result<HashMap<Sha256, InvoiceInfo>> {
+            let db = self.db.lock().await;
 
-        let read_txn = db.begin_read()?;
+            let read_txn = db.begin_read()?;
 
-        let invoice_table = read_txn.open_table(HASH)?;
+            let invoice_table = read_txn.open_table(HASH)?;
 
-        let pending_invoices = invoice_table
-            .iter()?
-            .flatten()
-            .filter_map(|(k, v)| {
-                let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
-                invoice
-                    .ok()
-                    .filter(|invoice| {
-                        invoice.status.eq(&InvoiceStatus::Paid)
-                            && invoice.token_status.eq(&InvoiceTokenStatus::NotIssued)
-                    })
-                    .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
-            })
-            .collect::<HashMap<Sha256, InvoiceInfo>>();
+            let pending_invoices = invoice_table
+                .iter()?
+                .flatten()
+                .filter_map(|(k, v)| {
+                    let invoice: Result<InvoiceInfo, _> = serde_json::from_str(v.value());
+                    invoice
+                        .ok()
+                        .filter(|invoice| {
+                            invoice.status.eq(&InvoiceStatus::Paid)
+                                && invoice.token_status.eq(&InvoiceTokenStatus::NotIssued)
+                        })
+                        .map(|invoice| (Sha256::from_str(k.value()).unwrap(), invoice))
+                })
+                .collect::<HashMap<Sha256, InvoiceInfo>>();
 
-        Ok(pending_invoices)
-    }
-
+            Ok(pending_invoices)
+        }
+    */
     pub async fn add_used_proofs(&self, proofs: &Proofs) -> Result<()> {
         let db = self.db.lock().await;
 
@@ -296,7 +296,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_spent_secrets(&self) -> Result<HashSet<Secret>> {
+    pub async fn get_spent_secrets(&self) -> Result<HashSet<String>> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -306,7 +306,7 @@ impl Db {
         let used_proofs = used_proofs_table
             .iter()?
             .flatten()
-            .map(|(k, _v)| Secret::from_bytes(k.value()))
+            .map(|(k, _v)| String::from_utf8(k.value().to_vec()).unwrap())
             .collect();
         Ok(used_proofs)
     }

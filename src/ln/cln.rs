@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use cashu::lightning_invoice::Invoice;
-use cashu::mint::{Mint, Sha256};
-use cashu::Amount;
+use cashu_crab::lightning_invoice::Invoice;
+use cashu_crab::mint::Mint;
+use cashu_crab::Amount;
+use cashu_crab::Sha256;
 use cln_rpc::model::{
     InvoiceRequest, ListinvoicesRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse,
 };
@@ -30,7 +31,7 @@ pub struct Cln {
 }
 
 impl Cln {
-    pub fn new(rpc_socket: PathBuf, db: Db, mint: Arc<Mutex<Mint>>) -> Self {
+    pub async fn new(rpc_socket: PathBuf, db: Db, mint: Arc<Mutex<Mint>>) -> Self {
         Self {
             rpc_socket,
             db,
@@ -76,7 +77,6 @@ impl LnProcessor for Cln {
                     None,
                 );
 
-                self.db.add_invoice(&invoice_info).await?;
                 invoice_info
             }
             _ => panic!("CLN returned wrong response kind"),
@@ -104,8 +104,6 @@ impl LnProcessor for Cln {
             invoice_info.confirmed_at = Some(unix_time());
 
             let mut mint = self.mint.lock().await;
-
-            mint.pay_invoice(invoice_info.hash);
 
             self.db.add_invoice(&invoice_info).await?;
         }
@@ -146,11 +144,6 @@ impl LnProcessor for Cln {
         invoice.status = status;
 
         self.db.add_invoice(&invoice).await?;
-
-        let mut mint = self.mint.lock().await;
-        if status.eq(&InvoiceStatus::Paid) {
-            mint.pay_invoice(invoice.hash);
-        }
 
         Ok(status)
     }

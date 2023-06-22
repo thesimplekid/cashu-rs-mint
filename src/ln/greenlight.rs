@@ -4,9 +4,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use bip39::{Language, Mnemonic};
-use cashu::lightning_invoice::Invoice;
-use cashu::mint::{Mint, Sha256};
-use cashu::Amount;
+use cashu_crab::lightning_invoice::Invoice;
+use cashu_crab::mint::Mint;
+use cashu_crab::Amount;
+use cashu_crab::Sha256;
 use futures::{Stream, StreamExt};
 use gl_client::bitcoin::Network;
 use gl_client::node::ClnClient;
@@ -175,8 +176,6 @@ impl LnProcessor for Greenlight {
 
             let mut mint = self.mint.lock().await;
 
-            mint.pay_invoice(invoice_info.hash);
-
             self.db.add_invoice(&invoice_info).await?;
         }
 
@@ -212,9 +211,6 @@ impl LnProcessor for Greenlight {
         self.db.add_invoice(&invoice).await?;
 
         let mut mint = self.mint.lock().await;
-        if status.eq(&InvoiceStatus::Paid) {
-            mint.pay_invoice(invoice.hash);
-        }
 
         Ok(status)
     }

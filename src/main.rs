@@ -7,14 +7,17 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cashu::keyset::Map;
-use cashu::lightning_invoice::Invoice as LnInvoice;
-use cashu::mint::{
-    CheckFeesResponse, CheckSpendableResponse, Invoice, KeySetsResponse, MeltResponse, Mint,
-    MintResponse, Sha256, SplitResponse,
+use axum_macros::debug_handler;
+use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
+use cashu_crab::amount::Amount;
+use cashu_crab::types::{
+    CheckFeesRequest, CheckFeesResponse, CheckSpendableRequest, CheckSpendableResponse,
+    MeltRequest, MeltResponse, MintRequest, PostMintResponse, RequestMintResponse, SplitPayload,
+    SplitRequest, SplitResponse,
 };
-use cashu::wallet::{check_fees, check_spendable, melt, split, MintRequest};
-use cashu::{keyset, lightning_invoice, secret::Secret, Amount};
+
+use cashu_crab::{keyset, mint::Mint, Sha256};
 use ln::cln::fee_reserve;
 use ln::greenlight::Greenlight;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
@@ -52,39 +55,21 @@ async fn main() -> anyhow::Result<()> {
 
     let all_keysets = db.get_all_keyset_info().await?;
 
-    let inactive_keysets: HashMap<keyset::Id, keyset::mint::KeySet> = all_keysets
+    let inactive_keysets: HashMap<String, keyset::mint::KeySet> = all_keysets
         .iter()
-        .map(|(k, v)| (*k, v.keyset.clone()))
+        .map(|(k, v)| (k.to_owned(), v.keyset.clone()))
         .collect();
 
-    let paid_invoices_info = db.get_unissued_invoices().await?;
-
-    let paid_invoices: HashMap<Sha256, (Amount, lightning_invoice::Invoice)> = paid_invoices_info
-        .iter()
-        .map(|(k, v)| (*k, (v.amount, v.invoice.clone())))
-        .collect();
-
-    let pending_invoices_info = db.get_pending_invoices().await?;
-
-    let pending_invoices: HashMap<Sha256, (Amount, Option<lightning_invoice::Invoice>)> =
-        pending_invoices_info
-            .iter()
-            .map(|(k, v)| (*k, (v.amount, Some(v.invoice.clone()))))
-            .collect();
-
-    let spent_secrets: HashSet<Secret> = db.get_spent_secrets().await?;
-
-    let mint = Mint::new_with_history(
-        settings.info.secret_key,
-        settings.info.derivation_path,
-        settings.info.max_order,
+    let mint = Mint::new(
+        &settings.info.secret_key,
+        &settings.info.derivation_path,
         inactive_keysets,
-        paid_invoices,
-        pending_invoices,
-        spent_secrets,
+        HashSet::new(),
+        settings.info.max_order,
     );
+
     let keyset = mint.active_keyset();
-    db.set_active_keyset(keyset.id).await?;
+    db.set_active_keyset(&keyset.id).await?;
     let keyset_info = KeysetInfo {
         valid_from: unix_time(),
         valid_to: None,
@@ -96,13 +81,12 @@ async fn main() -> anyhow::Result<()> {
 
     let ln = match settings.ln.ln_backend {
         LnBackend::Cln => Ln {
-            ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone())),
+            ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await),
         },
         LnBackend::Greenlight => Ln {
             ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
         },
     };
-
     let ln_clone = ln.clone();
     tokio::spawn(async move {
         loop {
@@ -127,9 +111,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/mint", get(get_request_mint))
         .route("/mint", post(post_mint))
         .route("/checkfees", post(post_check_fee))
-        .route("/melt", post(post_melt))
         .route("/split", post(post_split))
         .route("/check", post(post_check))
+        .route("/melt", post(post_melt))
         .route("/info", get(get_info))
         .with_state(state);
 
@@ -154,7 +138,7 @@ struct MintState {
     mint_info: MintInfo,
 }
 
-async fn get_keys(State(state): State<MintState>) -> Result<Json<Map>, StatusCode> {
+async fn get_keys(State(state): State<MintState>) -> Result<Json<keyset::Keys>, StatusCode> {
     let mint = state.mint.lock().await;
 
     let keys = mint.active_keyset_pubkeys();
@@ -164,7 +148,7 @@ async fn get_keys(State(state): State<MintState>) -> Result<Json<Map>, StatusCod
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RequestMintParams {
-    amount: u64,
+    amount: Amount,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,7 +168,7 @@ struct MintInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    descrption_long: Option<String>,
+    description_long: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     contact: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -200,7 +184,7 @@ impl From<config::MintInfo> for MintInfo {
             pubkey: info.pubkey,
             version: info.version,
             description: info.description,
-            descrption_long: info.descrption_long,
+            description_long: info.description_long,
             contact: info.contact,
             nuts: info.nuts,
             motd: info.motd,
@@ -208,7 +192,7 @@ impl From<config::MintInfo> for MintInfo {
     }
 }
 
-async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeySetsResponse>, StatusCode> {
+async fn get_keysets(State(state): State<MintState>) -> Result<Json<keyset::Response>, StatusCode> {
     let mint = state.mint.lock().await;
 
     Ok(Json(mint.keysets()))
@@ -217,12 +201,10 @@ async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeySetsRespo
 async fn get_request_mint(
     State(state): State<MintState>,
     Query(params): Query<RequestMintParams>,
-) -> Result<Json<Invoice>, Error> {
-    let amount = Amount::from(params.amount);
+) -> Result<Json<RequestMintResponse>, Error> {
+    let amount = params.amount;
 
-    let mut mint = state.mint.lock().await;
-
-    let hash = mint.process_invoice_request(amount);
+    let hash = sha256::Hash::hash(&cashu_crab::utils::random_hash());
 
     let invoice = state
         .ln
@@ -233,18 +215,18 @@ async fn get_request_mint(
             warn!("{}", err);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-
-    match mint.set_invoice(hash, invoice.invoice) {
-        Some(invoice) => Ok(Json(invoice)),
-        None => Err(StatusCode::INTERNAL_SERVER_ERROR.into()),
-    }
+    state.db.add_invoice(&invoice).await.unwrap();
+    Ok(Json(RequestMintResponse {
+        hash: hash.to_string(),
+        pr: invoice.invoice,
+    }))
 }
 
 async fn post_mint(
     State(state): State<MintState>,
     Query(params): Query<MintParams>,
     Json(payload): Json<MintRequest>,
-) -> Result<Json<MintResponse>, Error> {
+) -> Result<Json<PostMintResponse>, Error> {
     let hash = match params.hash {
         Some(hash) => hash,
         None => match params.payment_hash {
@@ -254,22 +236,19 @@ async fn post_mint(
     };
 
     let db = state.db;
-    let invoice = db.get_invoice_info(&hash).await.unwrap();
+    let invoice = db
+        .get_invoice_info(&hash)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    debug!("Before lock");
-    debug!("got mint lock");
+    // debug!("{:?}", invoice);
+
+    if invoice.amount != payload.total_amount() {
+        return Err(Error::InvoiceNotPaid);
+    }
 
     match invoice.status {
-        InvoiceStatus::Paid => {
-            // sanity check
-            // It really shouldnt be needed but incase wait invoice fails to call mint.pay_invoice
-            let mut mint = state.mint.lock().await;
-            if invoice.token_status.eq(&InvoiceTokenStatus::NotIssued) {
-                debug!("Invoice Paid");
-                mint.pay_invoice(hash);
-            }
-            drop(mint);
-        }
+        InvoiceStatus::Paid => {}
         InvoiceStatus::Unpaid => {
             debug!("Checking");
             state
@@ -280,6 +259,12 @@ async fn post_mint(
                 .unwrap();
             let invoice = db.get_invoice_info(&hash).await.unwrap();
 
+            match invoice.status {
+                InvoiceStatus::Unpaid => return Err(Error::InvoiceNotPaid),
+                InvoiceStatus::Expired => return Err(Error::InvoiceExpired),
+                _ => (),
+            }
+
             debug!("Unpaid check: {:?}", invoice.status);
         }
         InvoiceStatus::Expired => {
@@ -289,7 +274,7 @@ async fn post_mint(
 
     let mut mint = state.mint.lock().await;
 
-    let res = match mint.process_mint_request(hash, payload) {
+    let res = match mint.process_mint_request(payload) {
         Ok(mint_res) => {
             let mut invoice = db.get_invoice_info(&hash).await.map_err(|err| {
                 warn!("{}", err);
@@ -315,67 +300,34 @@ async fn post_mint(
         },
     };
 
+    debug!("Mint res: {:?}", res);
+    debug!("Mint res: {:?}", serde_json::to_string(&res));
+
     Ok(Json(res))
 }
 
 async fn post_check_fee(
-    Json(payload): Json<check_fees::Request>,
+    Json(payload): Json<CheckFeesRequest>,
 ) -> Result<Json<CheckFeesResponse>, Error> {
-    let invoice = LnInvoice::from_str(&payload.pr)?;
+    // let invoice = LnInvoice::from_str(&payload.pr)?;
 
-    let amount_msat = invoice.amount_milli_satoshis().unwrap();
+    let amount_msat = payload.pr.amount_milli_satoshis().unwrap();
     let amount_sat = amount_msat / 1000;
     let amount = Amount::from(amount_sat);
 
     let fee = fee_reserve(amount);
 
-    Ok(Json(CheckFeesResponse::new(fee)))
-}
-
-async fn post_melt(
-    State(state): State<MintState>,
-    Json(payload): Json<melt::Request>,
-) -> Result<Json<MeltResponse>, Error> {
-    let mut mint = state.mint.lock().await;
-    mint.verify_melt_request(&payload).map_err(|err| {
-        warn!("{}", err);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Pay ln
-    let pay_res = state
-        .ln
-        .ln_processor
-        .pay_invoice(payload.payment_request.clone(), None)
-        .await
-        .map_err(|err| {
-            warn!("{}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    state
-        .db
-        .add_used_proofs(&payload.proofs)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Process mint request
-    Ok(Json(
-        mint.process_melt_request(payload, &pay_res.0, pay_res.1)
-            .map_err(|err| {
-                warn!("{}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?,
-    ))
+    Ok(Json(CheckFeesResponse { fee }))
 }
 
 async fn post_split(
     State(state): State<MintState>,
-    Json(payload): Json<split::Request>,
+    Json(payload): Json<SplitRequest>,
 ) -> Result<Json<SplitResponse>, Error> {
     let mut mint = state.mint.lock().await;
 
     let proofs = payload.proofs.clone();
+
     match mint.process_split_request(payload) {
         Ok(split_response) => {
             state.db.add_used_proofs(&proofs).await.map_err(|err| {
@@ -392,13 +344,50 @@ async fn post_split(
     }
 }
 
+async fn post_melt(
+    State(state): State<MintState>,
+    Json(payload): Json<MeltRequest>,
+) -> Result<Json<MeltResponse>, Error> {
+    let mut mint = state.mint.lock().await;
+    mint.verify_melt_request(&payload).map_err(|err| {
+        warn!("{}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Pay ln
+    let pay_res = state
+        .ln
+        .ln_processor
+        .pay_invoice(payload.pr.clone(), None)
+        .await
+        .map_err(|err| {
+            warn!("{}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    state
+        .db
+        .add_used_proofs(&payload.proofs)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Process mint request
+    Ok(Json(
+        mint.process_melt_request(&payload, &pay_res.0, pay_res.1)
+            .map_err(|err| {
+                warn!("{}", err);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?,
+    ))
+}
+
 async fn post_check(
     State(state): State<MintState>,
-    Json(payload): Json<check_spendable::Request>,
+    Json(payload): Json<CheckSpendableRequest>,
 ) -> Result<Json<CheckSpendableResponse>, Error> {
     let mint = state.mint.lock().await;
 
-    Ok(Json(mint.check_spendable(payload).map_err(|err| {
+    Ok(Json(mint.check_spendable(&payload).map_err(|err| {
         warn!("{}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?))

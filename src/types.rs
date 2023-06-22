@@ -1,5 +1,6 @@
 use anyhow::Result;
-use cashu::keyset::mint::KeySet;
+// use cashu::keyset::mint::KeySet;
+use cashu_crab::keyset::mint::KeySet;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,6 +3,7 @@ url = "https://example.com/"
 listen_host = "127.0.0.1"
 listen_port = 8085
 secret_key = "supersecretprivatekey"
+max_order = 32
 
 [mint_info]
 name = "test mint"

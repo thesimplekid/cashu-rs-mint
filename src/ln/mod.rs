@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use cashu::{lightning_invoice::Invoice, mint::Sha256, Amount};
+use cashu_crab::{lightning_invoice::Invoice, Amount, Sha256};
 use cln_rpc::model::responses::ListinvoicesInvoicesStatus;
 use gl_client::pb::cln::listinvoices_invoices::ListinvoicesInvoicesStatus as GL_ListInvoiceStatus;
 use serde::{Deserialize, Serialize};
