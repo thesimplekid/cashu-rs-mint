@@ -3,7 +3,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
 use async_trait::async_trait;
 use cashu_crab::lightning_invoice::Invoice;
 use cashu_crab::mint::Mint;
@@ -21,7 +20,7 @@ use uuid::Uuid;
 use crate::database::Db;
 use crate::utils::unix_time;
 
-use super::{InvoiceInfo, InvoiceStatus, LnProcessor};
+use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
 
 #[derive(Clone)]
 pub struct Cln {
@@ -47,7 +46,7 @@ impl LnProcessor for Cln {
         amount: Amount,
         hash: Sha256,
         description: &str,
-    ) -> Result<InvoiceInfo> {
+    ) -> Result<InvoiceInfo, Error> {
         let mut cln_client = cln_rpc::ClnRpc::new(&self.rpc_socket).await?;
 
         let cln_response = cln_client
@@ -84,7 +83,7 @@ impl LnProcessor for Cln {
         Ok(invoice)
     }
 
-    async fn wait_invoice(&self) -> Result<()> {
+    async fn wait_invoice(&self) -> Result<(), Error> {
         let last_pay_index = self.db.get_last_pay_index().await?;
         let mut invoices = invoice_stream(&self.rpc_socket, Some(last_pay_index)).await?;
 
@@ -109,7 +108,7 @@ impl LnProcessor for Cln {
         Ok(())
     }
 
-    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus> {
+    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error> {
         let mut cln_client = cln_rpc::ClnRpc::new(&self.rpc_socket).await?;
 
         let cln_response = cln_client
@@ -130,7 +129,9 @@ impl LnProcessor for Cln {
             }
             _ => {
                 warn!("CLN returned wrong response kind");
-                bail!("CLN returned wrong response kind")
+                return Err(Error::Custom(
+                    "CLN returned wrong response kind".to_string(),
+                ));
             }
         };
 
@@ -150,7 +151,7 @@ impl LnProcessor for Cln {
         &self,
         invoice: Invoice,
         max_fee: Option<Amount>,
-    ) -> Result<(String, Amount)> {
+    ) -> Result<(String, Amount), Error> {
         let mut cln_client = cln_rpc::ClnRpc::new(&self.rpc_socket).await?;
 
         let maxfee = max_fee.map(|amount| CLN_Amount::from_sat(u64::from(amount)));
@@ -187,7 +188,7 @@ impl LnProcessor for Cln {
 async fn invoice_stream(
     socket_addr: &PathBuf,
     last_pay_index: Option<u64>,
-) -> Result<impl Stream<Item = WaitanyinvoiceResponse>> {
+) -> Result<impl Stream<Item = WaitanyinvoiceResponse>, Error> {
     let cln_client = cln_rpc::ClnRpc::new(&socket_addr).await?;
 
     Ok(futures::stream::unfold(

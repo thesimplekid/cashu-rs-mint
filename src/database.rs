@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
@@ -9,7 +8,6 @@ use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
 use crate::ln::InvoiceInfo;
-use crate::ln::{InvoiceStatus, InvoiceTokenStatus};
 use crate::types::KeysetInfo;
 
 // Key: KeysetId

@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use bip39::{Language, Mnemonic};
 use cashu_crab::lightning_invoice::Invoice;
@@ -29,7 +28,7 @@ use uuid::Uuid;
 use crate::database::Db;
 use crate::utils::unix_time;
 
-use super::{InvoiceInfo, InvoiceStatus, LnProcessor};
+use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
 
 #[derive(Clone)]
 pub struct Greenlight {
@@ -108,7 +107,7 @@ impl LnProcessor for Greenlight {
         amount: Amount,
         hash: Sha256,
         description: &str,
-    ) -> Result<InvoiceInfo> {
+    ) -> Result<InvoiceInfo, Error> {
         let mut cln_client = self.node.lock().await;
 
         let cln_response = cln_client
@@ -126,7 +125,8 @@ impl LnProcessor for Greenlight {
                 cltv: None,
                 deschashonly: Some(true),
             })
-            .await?;
+            .await
+            .map_err(|_| Error::Custom("Tonic Error".to_string()))?;
 
         let InvoiceResponse {
             bolt11,
@@ -154,7 +154,7 @@ impl LnProcessor for Greenlight {
         Ok(invoice)
     }
 
-    async fn wait_invoice(&self) -> Result<()> {
+    async fn wait_invoice(&self) -> Result<(), Error> {
         let last_pay_index = self.db.get_last_pay_index().await?;
         let node = self.node.clone();
         let mut invoices = invoice_stream(node, Some(last_pay_index)).await?;
@@ -182,7 +182,7 @@ impl LnProcessor for Greenlight {
         Ok(())
     }
 
-    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus> {
+    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error> {
         let mut cln_client = self.node.lock().await;
 
         let cln_response = cln_client
@@ -190,7 +190,8 @@ impl LnProcessor for Greenlight {
                 payment_hash: Some(payment_hash.to_string().as_bytes().to_vec()),
                 ..Default::default()
             })
-            .await?;
+            .await
+            .map_err(|_| Error::Custom("Tonic Error".to_string()))?;
 
         let ListinvoicesResponse { invoices, .. } = cln_response.into_inner();
 
@@ -219,7 +220,7 @@ impl LnProcessor for Greenlight {
         &self,
         invoice: Invoice,
         max_fee: Option<Amount>,
-    ) -> Result<(String, Amount)> {
+    ) -> Result<(String, Amount), Error> {
         let mut cln_client = self.node.lock().await;
 
         let maxfee = max_fee.map(|amount| Cln_Amount {
@@ -232,7 +233,8 @@ impl LnProcessor for Greenlight {
                 maxfee,
                 ..Default::default()
             })
-            .await?;
+            .await
+            .map_err(|_| Error::Custom("Tonic Error".to_string()))?;
 
         let PayResponse {
             payment_preimage,
@@ -251,7 +253,7 @@ impl LnProcessor for Greenlight {
 async fn invoice_stream(
     cln_client: Arc<Mutex<ClnClient>>,
     last_pay_index: Option<u64>,
-) -> Result<impl Stream<Item = WaitanyinvoiceResponse>> {
+) -> Result<impl Stream<Item = WaitanyinvoiceResponse>, Error> {
     let cln_client = cln_client.lock().await.clone();
     Ok(futures::stream::unfold(
         (cln_client, last_pay_index),

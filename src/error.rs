@@ -5,12 +5,13 @@ use axum::response::{IntoResponse, Response};
 use cashu_crab::lightning_invoice::ParseOrSemanticError;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum Error {
     InvoiceNotPaid,
     InvoiceExpired,
     DecodeInvoice,
     StatusCode(StatusCode),
+    LnError(crate::ln::Error),
 }
 
 impl std::error::Error for Error {}
@@ -22,6 +23,7 @@ impl fmt::Display for Error {
             Self::InvoiceExpired => write!(f, "Lightning invoice expired."),
             Self::DecodeInvoice => write!(f, "Failed to decode LN Invoice"),
             Self::StatusCode(code) => write!(f, "{}", code.as_str()),
+            Self::LnError(code) => write!(f, "{}", code.to_string()),
         }
     }
 }
@@ -68,6 +70,9 @@ impl IntoResponse for Error {
             Error::DecodeInvoice => (StatusCode::BAD_REQUEST, self.to_string()).into_response(),
             Error::InvoiceExpired => (StatusCode::BAD_REQUEST, self.to_string()).into_response(),
             Error::StatusCode(code) => (code, "").into_response(),
+            Error::LnError(code) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
+            }
         }
     }
 }

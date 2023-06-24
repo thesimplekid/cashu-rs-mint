@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -62,11 +62,13 @@ async fn main() -> anyhow::Result<()> {
         .map(|(k, v)| (k.to_owned(), v.keyset.clone()))
         .collect();
 
+    let spent_secrets = db.get_spent_secrets().await?;
+
     let mint = Mint::new(
         &settings.info.secret_key,
         &settings.info.derivation_path,
         inactive_keysets,
-        HashSet::new(),
+        spent_secrets,
         settings.info.max_order,
     );
 

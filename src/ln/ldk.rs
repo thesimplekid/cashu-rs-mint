@@ -25,6 +25,7 @@ use crate::config::Settings;
 use crate::database::Db;
 use crate::utils::unix_time;
 
+use super::Error;
 use super::InvoiceInfo;
 use super::InvoiceStatus;
 use super::LnProcessor;
@@ -310,7 +311,7 @@ impl LnProcessor for Ldk {
         amount: Amount,
         hash: Sha256,
         description: &str,
-    ) -> anyhow::Result<InvoiceInfo> {
+    ) -> Result<InvoiceInfo, Error> {
         let invoice = self
             .node
             .receive_payment(amount.to_msat(), description, SECS_IN_DAY)?;
@@ -327,7 +328,7 @@ impl LnProcessor for Ldk {
         Ok(inoice_info)
     }
 
-    async fn wait_invoice(&self) -> anyhow::Result<()> {
+    async fn wait_invoice(&self) -> Result<(), Error> {
         while let Some(event) = self.node.next_event() {
             match event {
                 Event::PaymentReceived {
@@ -359,7 +360,7 @@ impl LnProcessor for Ldk {
         Ok(())
     }
 
-    async fn check_invoice_status(&self, payment_hash: &Sha256) -> anyhow::Result<InvoiceStatus> {
+    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error> {
         let payment_hash = ldk_node::lightning::ln::PaymentHash(payment_hash.to_byte_array());
 
         let payment = self
@@ -375,7 +376,7 @@ impl LnProcessor for Ldk {
         &self,
         invoice: Invoice,
         _max_fee: Option<Amount>,
-    ) -> anyhow::Result<(String, Amount)> {
+    ) -> Result<(String, Amount), Error> {
         let payment_hash = self.node.send_payment(&invoice)?;
         let payment = self
             .node

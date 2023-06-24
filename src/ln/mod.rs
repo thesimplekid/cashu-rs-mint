@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use cashu_crab::{lightning_invoice::Invoice, Amount, Sha256};
 use cln_rpc::model::responses::ListinvoicesInvoicesStatus;
 use gl_client::pb::cln::listinvoices_invoices::ListinvoicesInvoicesStatus as GL_ListInvoiceStatus;
 use serde::{Deserialize, Serialize};
 
+pub use error::Error;
+
 pub mod cln;
+pub mod error;
 pub mod greenlight;
 pub mod ldk;
 
@@ -113,7 +115,7 @@ impl InvoiceInfo {
         }
     }
 
-    pub fn as_json(&self) -> Result<String> {
+    pub fn as_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(self)?)
     }
 }
@@ -125,15 +127,15 @@ pub trait LnProcessor: Send + Sync {
         amount: Amount,
         hash: Sha256,
         description: &str,
-    ) -> Result<InvoiceInfo>;
+    ) -> Result<InvoiceInfo, Error>;
 
-    async fn wait_invoice(&self) -> Result<()>;
+    async fn wait_invoice(&self) -> Result<(), Error>;
 
     async fn pay_invoice(
         &self,
         invoice: Invoice,
         max_fee: Option<Amount>,
-    ) -> Result<(String, Amount)>;
+    ) -> Result<(String, Amount), Error>;
 
-    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus>;
+    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error>;
 }
