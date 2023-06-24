@@ -103,8 +103,6 @@ impl LnProcessor for Cln {
             invoice_info.status = InvoiceStatus::Paid;
             invoice_info.confirmed_at = Some(unix_time());
 
-            let mut mint = self.mint.lock().await;
-
             self.db.add_invoice(&invoice_info).await?;
         }
 

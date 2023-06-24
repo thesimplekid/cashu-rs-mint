@@ -7,11 +7,9 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use axum_macros::debug_handler;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use cashu_crab::amount::Amount;
-
 use cashu_crab::nuts::nut01::Keys;
 use cashu_crab::nuts::nut03::RequestMintResponse;
 use cashu_crab::nuts::nut04::{MintRequest, PostMintResponse};
@@ -23,6 +21,7 @@ use cashu_crab::nuts::*;
 use cashu_crab::{mint::Mint, Sha256};
 use ln::cln::fee_reserve;
 use ln::greenlight::Greenlight;
+use ln::ldk::Ldk;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -89,8 +88,12 @@ async fn main() -> anyhow::Result<()> {
         LnBackend::Greenlight => Ln {
             ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
         },
+        LnBackend::Ldk => Ln {
+            ln_processor: Arc::new(Ldk::new(&settings, db.clone()).await?),
+        },
     };
     let ln_clone = ln.clone();
+
     tokio::spawn(async move {
         loop {
             if let Err(err) = ln_clone.ln_processor.wait_invoice().await {

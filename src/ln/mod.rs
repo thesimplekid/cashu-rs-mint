@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod cln;
 pub mod greenlight;
+pub mod ldk;
 
 #[derive(Clone)]
 pub struct Ln {
@@ -44,6 +45,16 @@ impl From<GL_ListInvoiceStatus> for InvoiceStatus {
             GL_ListInvoiceStatus::Unpaid => Self::Unpaid,
             GL_ListInvoiceStatus::Paid => Self::Paid,
             GL_ListInvoiceStatus::Expired => Self::Expired,
+        }
+    }
+}
+
+impl From<ldk_node::PaymentStatus> for InvoiceStatus {
+    fn from(status: ldk_node::PaymentStatus) -> Self {
+        match status {
+            ldk_node::PaymentStatus::Pending => Self::Unpaid,
+            ldk_node::PaymentStatus::Succeeded => Self::Paid,
+            ldk_node::PaymentStatus::Failed => Self::Expired,
         }
     }
 }

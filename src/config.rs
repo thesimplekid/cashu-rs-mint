@@ -76,6 +76,7 @@ pub enum LnBackend {
     #[default]
     Cln,
     Greenlight,
+    Ldk,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
