@@ -1,7 +1,9 @@
 use std::{fmt, string::FromUtf8Error};
 
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use cashu_crab::lightning_invoice::ParseOrSemanticError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Error {
@@ -67,5 +69,36 @@ impl From<FromUtf8Error> for Error {
 impl From<ldk_node::NodeError> for Error {
     fn from(err: ldk_node::NodeError) -> Self {
         Self::Custom(err.to_string())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    code: u16,
+    error: String,
+}
+
+impl ErrorResponse {
+    pub fn new(code: u16, error: &str) -> Self {
+        Self {
+            code,
+            error: error.to_string(),
+        }
+    }
+
+    pub fn as_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        match self {
+            Error::StatusCode(code) => (code, "").into_response(),
+            Self::SerdeError(code) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
+            }
+            Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
+        }
     }
 }

@@ -69,12 +69,12 @@ impl Ldk {
             .route("/open-channel", post(post_new_open_channel))
             .route("/list-channels", get(get_list_channels))
             .route("/balance", get(get_balances))
-            // TODO: Close channel
             // TODO: Pay invoice
             .route("/pay-invoice", post(post_pay_invoice))
             .route("/pay-keysend", post(post_pay_keysend))
             .route("/invoice", get(get_create_invoice))
             .route("/pay-on-chain", post(post_pay_on_chain))
+            .route("/close-all", post(post_close_all))
             .with_state(state);
 
         let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
@@ -91,10 +91,6 @@ impl Ldk {
                 warn!("{:?}", err)
             }
         });
-
-        // let funding_address = node.new_onchain_address()?;
-
-        // info!("Funding Address: {}", funding_address);
 
         Ok(Self {
             node: node.clone(),
@@ -121,6 +117,20 @@ async fn post_close_channel(
 
 */
 
+async fn post_close_all(State(state): State<LdkState>) -> Result<(), Error> {
+    let channels = state.node.list_channels();
+    let channels: Vec<(ldk_node::ChannelId, PublicKey)> = channels
+        .into_iter()
+        .map(|c| (c.channel_id, c.counterparty_node_id))
+        .collect();
+
+    for (id, peer) in channels {
+        state.node.close_channel(&id, peer).unwrap();
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayOnChainRequest {
     sat: u64,
@@ -131,7 +141,7 @@ async fn post_pay_on_chain(
     State(state): State<LdkState>,
     // Stop using query string
     Query(params): Query<PayOnChainRequest>,
-) -> Result<Json<String>, StatusCode> {
+) -> Result<Json<String>, Error> {
     let address = Address::from_str(&params.address).unwrap();
     let res = state
         .node
@@ -162,7 +172,7 @@ async fn post_pay_keysend(
     State(state): State<LdkState>,
     // Stop using query string
     Query(params): Query<KeysendRequest>,
-) -> Result<Json<String>, StatusCode> {
+) -> Result<Json<String>, Error> {
     let res = state
         .node
         .send_spontaneous_payment(params.amount, params.pubkey)
@@ -175,7 +185,7 @@ async fn post_pay_invoice(
     State(state): State<LdkState>,
     // Stop using query string
     Query(params): Query<Bolt11>,
-) -> Result<Json<String>, StatusCode> {
+) -> Result<Json<String>, Error> {
     let res = state.node.send_payment(&params.bolt11).unwrap();
 
     Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
@@ -184,7 +194,7 @@ async fn post_pay_invoice(
 async fn get_create_invoice(
     State(state): State<LdkState>,
     Query(params): Query<CreateInvoiceParams>,
-) -> Result<Json<Bolt11>, StatusCode> {
+) -> Result<Json<Bolt11>, Error> {
     let CreateInvoiceParams { msat, description } = params;
 
     let invoice = state
@@ -214,9 +224,7 @@ impl From<ChannelDetails> for ChannelInfo {
     }
 }
 
-async fn get_list_channels(
-    State(state): State<LdkState>,
-) -> Result<Json<Vec<ChannelInfo>>, StatusCode> {
+async fn get_list_channels(State(state): State<LdkState>) -> Result<Json<Vec<ChannelInfo>>, Error> {
     let channel_info = state.node.list_channels();
 
     Ok(Json(channel_info.into_iter().map(|c| c.into()).collect()))
@@ -238,7 +246,7 @@ struct BalanceResponse {
     ln: Amount,
 }
 
-async fn get_balances(State(state): State<LdkState>) -> Result<Json<BalanceResponse>, StatusCode> {
+async fn get_balances(State(state): State<LdkState>) -> Result<Json<BalanceResponse>, Error> {
     let on_chain_total = Amount::from_sat(state.node.total_onchain_balance_sats().unwrap());
     let on_chain_spendable = Amount::from_sat(state.node.spendable_onchain_balance_sats().unwrap());
     let channel_info = state.node.list_channels();
@@ -261,7 +269,7 @@ struct FundingAddressResponse {
 
 async fn get_funding_address(
     State(state): State<LdkState>,
-) -> Result<Json<FundingAddressResponse>, StatusCode> {
+) -> Result<Json<FundingAddressResponse>, Error> {
     let on_chain_balance = state.node.new_onchain_address().unwrap();
 
     Ok(Json(FundingAddressResponse {
@@ -272,7 +280,7 @@ async fn get_funding_address(
 async fn post_new_open_channel(
     State(state): State<LdkState>,
     Query(params): Query<OpenChannelParams>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, Error> {
     let OpenChannelParams {
         public_key,
         ip,
@@ -288,11 +296,6 @@ async fn post_new_open_channel(
     let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
 
     let net_address = NetAddress::from(peer_addr);
-    /*
-    if let Err(err) = state.node.connect(public_key, net_address, true) {
-        warn!("{:?}", err);
-    };
-    */
 
     if let Err(err) =
         state
