@@ -10,7 +10,7 @@ async-trait = "0.1.68"
 axum = "0.6.18"
 axum-macros = "0.3.7"
 # cashu-crab = { path = "../cashu-crab" }
-cashu-crab = { git = "https://github.com/thesimplekid/cashu-crab", rev = "471a4d5" }
+cashu-crab = { git = "https://github.com/thesimplekid/cashu-crab", rev = "ca44218" }
 cln-rpc = "0.1.3"
 config = { version = "0.13.3", features = ["toml"] }
 dirs = "5.0.1"
