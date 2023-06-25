@@ -94,8 +94,8 @@ async fn main() -> anyhow::Result<()> {
             ln_processor: Arc::new(Ldk::new(&settings, db.clone()).await?),
         },
     };
-    let ln_clone = ln.clone();
 
+    let ln_clone = ln.clone();
     tokio::spawn(async move {
         loop {
             if let Err(err) = ln_clone.ln_processor.wait_invoice().await {
@@ -307,9 +307,6 @@ async fn post_mint(
             }
         },
     };
-
-    debug!("Mint res: {:?}", res);
-    debug!("Mint res: {:?}", serde_json::to_string(&res));
 
     Ok(Json(res))
 }
