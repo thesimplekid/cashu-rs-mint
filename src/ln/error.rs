@@ -72,6 +72,12 @@ impl From<ldk_node::NodeError> for Error {
     }
 }
 
+impl From<std::net::AddrParseError> for Error {
+    fn from(err: std::net::AddrParseError) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     code: u16,
@@ -79,14 +85,14 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
-    pub fn new(code: u16, error: &str) -> Self {
+    pub fn _new(code: u16, error: &str) -> Self {
         Self {
             code,
             error: error.to_string(),
         }
     }
 
-    pub fn as_json(&self) -> String {
+    pub fn _as_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
 }

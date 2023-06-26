@@ -15,7 +15,6 @@ email = "me@example.com"
 
 [ln]
 path = "~/.lightning/signet/lightning-rpc"
-# ln_backend = "Ldk"
-ln_backend = "Cln"
+ln_backend = "Ldk"
 fee_percent = 1.0
 reserve_fee_min = 1000

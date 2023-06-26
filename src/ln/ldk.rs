@@ -139,22 +139,12 @@ pub struct PayOnChainRequest {
 
 async fn post_pay_on_chain(
     State(state): State<LdkState>,
-    // Stop using query string
-    Query(params): Query<PayOnChainRequest>,
+    Json(payload): Json<PayOnChainRequest>,
 ) -> Result<Json<String>, Error> {
-    let address = Address::from_str(&params.address).unwrap();
-    let res = state
-        .node
-        .send_to_onchain_address(&address, params.sat)
-        .unwrap();
+    let address = Address::from_str(&payload.address).unwrap();
+    let res = state.node.send_to_onchain_address(&address, payload.sat)?;
 
     Ok(Json(res.to_string()))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateInvoiceParams {
-    msat: u64,
-    description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,12 +160,11 @@ pub struct KeysendRequest {
 
 async fn post_pay_keysend(
     State(state): State<LdkState>,
-    // Stop using query string
-    Query(params): Query<KeysendRequest>,
+    Json(payload): Json<KeysendRequest>,
 ) -> Result<Json<String>, Error> {
     let res = state
         .node
-        .send_spontaneous_payment(params.amount, params.pubkey)
+        .send_spontaneous_payment(payload.amount, payload.pubkey)
         .unwrap();
 
     Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
@@ -183,12 +172,17 @@ async fn post_pay_keysend(
 
 async fn post_pay_invoice(
     State(state): State<LdkState>,
-    // Stop using query string
-    Query(params): Query<Bolt11>,
+    Json(payload): Json<Bolt11>,
 ) -> Result<Json<String>, Error> {
-    let res = state.node.send_payment(&params.bolt11).unwrap();
+    let res = state.node.send_payment(&payload.bolt11).unwrap();
 
     Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInvoiceParams {
+    msat: u64,
+    description: String,
 }
 
 async fn get_create_invoice(
@@ -231,15 +225,6 @@ async fn get_list_channels(State(state): State<LdkState>) -> Result<Json<Vec<Cha
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OpenChannelParams {
-    public_key: PublicKey,
-    ip: String,
-    port: u16,
-    amount: u64,
-    push_amount: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 struct BalanceResponse {
     on_chain_spendable: Amount,
     on_chain_total: Amount,
@@ -270,28 +255,37 @@ struct FundingAddressResponse {
 async fn get_funding_address(
     State(state): State<LdkState>,
 ) -> Result<Json<FundingAddressResponse>, Error> {
-    let on_chain_balance = state.node.new_onchain_address().unwrap();
+    let on_chain_balance = state.node.new_onchain_address()?;
 
     Ok(Json(FundingAddressResponse {
         address: on_chain_balance.to_string(),
     }))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenChannelRequest {
+    public_key: PublicKey,
+    ip: String,
+    port: u16,
+    amount: u64,
+    push_amount: Option<u64>,
+}
+
 async fn post_new_open_channel(
     State(state): State<LdkState>,
-    Query(params): Query<OpenChannelParams>,
+    Json(payload): Json<OpenChannelRequest>,
 ) -> Result<StatusCode, Error> {
-    let OpenChannelParams {
+    let OpenChannelRequest {
         public_key,
         ip,
         port,
         amount,
         push_amount,
-    } = params;
+    } = payload;
 
     // TODO: Check if node has sufficient onchain balance
 
-    let peer_ip = Ipv4Addr::from_str(&ip).unwrap();
+    let peer_ip = Ipv4Addr::from_str(&ip)?;
 
     let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
 
