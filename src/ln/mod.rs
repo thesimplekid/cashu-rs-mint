@@ -29,6 +29,7 @@ pub enum InvoiceStatus {
     Unpaid,
     Paid,
     Expired,
+    InFlight,
 }
 
 impl From<ListinvoicesInvoicesStatus> for InvoiceStatus {
@@ -67,6 +68,7 @@ impl ToString for InvoiceStatus {
             InvoiceStatus::Paid => "Paid".to_string(),
             InvoiceStatus::Unpaid => "Unpaid".to_string(),
             InvoiceStatus::Expired => "Expired".to_string(),
+            InvoiceStatus::InFlight => "InFlight".to_string(),
         }
     }
 }

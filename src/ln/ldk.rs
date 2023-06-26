@@ -20,6 +20,7 @@ use ldk_node::{Builder, Config, NetAddress};
 use ldk_node::{Event, Node};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
+use tokio::task::{spawn_local, JoinHandle};
 
 use crate::config::Settings;
 use crate::database::Db;
@@ -51,11 +52,15 @@ impl Ldk {
         };
         let mut builder = Builder::from_config(config);
         builder.set_entropy_seed_path("./myseed".to_string());
-        builder.set_network(Network::Testnet);
+        builder.set_network(Network::Signet);
+        builder.set_esplora_server("https://mutinynet.com/api".to_string());
+        builder.set_gossip_source_rgs("https://rgs.mutinynet.com/snapshot/".to_string());
+        /*
         builder.set_esplora_server("https://blockstream.info/testnet/api".to_string());
         builder.set_gossip_source_rgs(
             "https://rapidsync.lightningdevkit.org/testnet/snapshot".to_string(),
         );
+        */
 
         let node = Arc::new(builder.build()?);
 
@@ -170,19 +175,37 @@ async fn post_pay_keysend(
     Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayInvoiceResponse {
+    paymnet_hash: Sha256,
+    status: InvoiceStatus,
+}
+
 async fn post_pay_invoice(
     State(state): State<LdkState>,
     Json(payload): Json<Bolt11>,
-) -> Result<Json<String>, Error> {
-    let res = state.node.send_payment(&payload.bolt11).unwrap();
+) -> Result<Json<PayInvoiceResponse>, Error> {
+    let p = payload.bolt11.payment_hash();
 
-    Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
+    let node = state.node.clone();
+    let bolt11 = payload.bolt11.clone();
+    let _: JoinHandle<Result<(), Error>> = tokio::spawn(async move {
+        let _res = node.send_payment(&bolt11.clone())?;
+        Ok(())
+    });
+
+    let res = PayInvoiceResponse {
+        paymnet_hash: Sha256::from_str(&p.to_string())?,
+        status: InvoiceStatus::InFlight,
+    };
+
+    Ok(Json(res))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInvoiceParams {
     msat: u64,
-    description: String,
+    description: Option<String>,
 }
 
 async fn get_create_invoice(
@@ -190,6 +213,14 @@ async fn get_create_invoice(
     Query(params): Query<CreateInvoiceParams>,
 ) -> Result<Json<Bolt11>, Error> {
     let CreateInvoiceParams { msat, description } = params;
+
+    let description = match description {
+        Some(des) => des,
+        None => {
+            // TODO: Get default from config
+            "Hello World".to_string()
+        }
+    };
 
     let invoice = state
         .node
