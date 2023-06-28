@@ -88,21 +88,21 @@ async fn main() -> anyhow::Result<()> {
             let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await);
             Ln {
                 ln_processor: cln.clone(),
-                node_manager: ln::Nodemanger::Cln(cln),
+                node_manager: ln::node_manager::Nodemanger::Cln(cln),
             }
         }
         LnBackend::Greenlight => {
             let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await);
             Ln {
                 ln_processor: gln.clone(),
-                node_manager: ln::Nodemanger::Greenlight(gln),
+                node_manager: ln::node_manager::Nodemanger::Greenlight(gln),
             }
         }
         LnBackend::Ldk => {
             let ldk = Arc::new(Ldk::new(&settings, db.clone()).await?);
             Ln {
                 ln_processor: ldk.clone(),
-                node_manager: ln::Nodemanger::Ldk(ldk),
+                node_manager: ln::node_manager::Nodemanger::Ldk(ldk),
             }
         }
     };
