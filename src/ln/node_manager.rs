@@ -31,7 +31,7 @@ impl Nodemanger {
     pub async fn start_server(&self, settings: &Settings) -> Result<(), Error> {
         let manager = self.clone();
         // TODO: These should be authed
-        let mint_service = Router::new()
+        let node_manager_service = Router::new()
             .route("/fund", get(get_funding_address))
             .route("/open-channel", post(post_new_open_channel))
             .route("/list-channels", get(get_list_channels))
@@ -50,7 +50,7 @@ impl Nodemanger {
         let listen_addr = std::net::SocketAddr::new(std::net::IpAddr::V4(ip), port);
 
         axum::Server::bind(&listen_addr)
-            .serve(mint_service.into_make_service())
+            .serve(node_manager_service.into_make_service())
             .await
             .map_err(|_| Error::Custom("Axum Server".to_string()))?;
 
@@ -398,6 +398,8 @@ async fn post_pay_on_chain(
     Ok(Json(res))
 }
 
-async fn post_close_all(State(state): State<Nodemanger>) -> Result<(), Error> {
-    state.close_all().await
+async fn post_close_all(State(state): State<Nodemanger>) -> Result<StatusCode, Error> {
+    state.close_all().await?;
+
+    Ok(StatusCode::OK)
 }

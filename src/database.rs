@@ -126,10 +126,9 @@ impl Db {
         let read_txn = db.begin_read()?;
         let keysets_table = read_txn.open_table(CONFIG)?;
 
-        let keyset_info = match keysets_table.get("active_keyset")? {
-            Some(contact) => Some(contact.value().to_string()),
-            None => None,
-        };
+        let keyset_info = keysets_table
+            .get("active_keyset")?
+            .map(|k| k.value().to_string());
 
         Ok(keyset_info)
     }

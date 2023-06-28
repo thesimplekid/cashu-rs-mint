@@ -17,7 +17,7 @@ dirs = "5.0.1"
 futures = "0.3.28"
 log = "0.4.19"
 gl-client = { git = "ssh://git@github.com/Blockstream/greenlight" }
-redb = "0.22.0"
+redb = "1.0.1"
 serde = "1.0.164"
 serde_json = "1.0.96"
 tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread", "sync"] }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug)]
 pub enum Error {
     StatusCode(StatusCode),
-    SerdeError(serde_json::Error),
+    Serde(serde_json::Error),
     Custom(String),
 }
 
@@ -18,7 +18,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StatusCode(code) => write!(f, "{}", code.as_str()),
-            Self::SerdeError(code) => write!(f, "{}", code),
+            Self::Serde(code) => write!(f, "{}", code),
             Self::Custom(code) => write!(f, "{}", code),
         }
     }
@@ -32,7 +32,7 @@ impl From<StatusCode> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
-        Self::SerdeError(err)
+        Self::Serde(err)
     }
 }
 
@@ -101,7 +101,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         match self {
             Error::StatusCode(code) => (code, "").into_response(),
-            Self::SerdeError(code) => {
+            Self::Serde(code) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
             }
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),

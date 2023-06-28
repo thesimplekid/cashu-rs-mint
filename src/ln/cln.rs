@@ -26,7 +26,7 @@ use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
 pub struct Cln {
     rpc_socket: PathBuf,
     db: Db,
-    mint: Arc<Mutex<Mint>>,
+    _mint: Arc<Mutex<Mint>>,
 }
 
 impl Cln {
@@ -34,7 +34,7 @@ impl Cln {
         Self {
             rpc_socket,
             db,
-            mint,
+            _mint: mint,
         }
     }
 }
@@ -62,7 +62,7 @@ impl LnProcessor for Cln {
             }))
             .await?;
 
-        let invoice = match cln_response {
+        match cln_response {
             cln_rpc::Response::Invoice(invoice_response) => {
                 let invoice = Invoice::from_str(&invoice_response.bolt11)?;
                 let payment_hash = Sha256::from_str(&invoice_response.payment_hash.to_string())?;
@@ -76,11 +76,10 @@ impl LnProcessor for Cln {
                     None,
                 );
 
-                invoice_info
+                Ok(invoice_info)
             }
             _ => panic!("CLN returned wrong response kind"),
-        };
-        Ok(invoice)
+        }
     }
 
     async fn wait_invoice(&self) -> Result<(), Error> {
