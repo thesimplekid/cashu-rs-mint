@@ -20,16 +20,16 @@ use ldk_node::{Builder, Config, NetAddress};
 use ldk_node::{Event, Node};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinHandle;
+use tokio::task::{spawn_local, JoinHandle};
 
 use crate::config::Settings;
 use crate::database::Db;
 use crate::utils::unix_time;
 
+use super::Error;
 use super::InvoiceInfo;
 use super::InvoiceStatus;
 use super::LnProcessor;
-use super::{Error, NodeManager};
 
 const SECS_IN_DAY: u32 = 86400;
 
@@ -39,8 +39,13 @@ pub struct Ldk {
     db: Db,
 }
 
+#[derive(Clone)]
+pub struct LdkState {
+    node: Arc<Node<SqliteStore>>,
+}
+
 impl Ldk {
-    pub async fn new(_settings: &Settings, db: Db) -> anyhow::Result<Self> {
+    pub async fn new(settings: &Settings, db: Db) -> anyhow::Result<Self> {
         let config = Config {
             log_level: ldk_node::LogLevel::Info,
             ..Default::default()
@@ -61,6 +66,37 @@ impl Ldk {
 
         node.start()?;
 
+        let state = LdkState { node: node.clone() };
+
+        // TODO: These should be authed
+        let mint_service = Router::new()
+            .route("/fund", get(get_funding_address))
+            .route("/open-channel", post(post_new_open_channel))
+            .route("/list-channels", get(get_list_channels))
+            .route("/balance", get(get_balances))
+            // TODO: Pay invoice
+            .route("/pay-invoice", post(post_pay_invoice))
+            .route("/pay-keysend", post(post_pay_keysend))
+            .route("/invoice", get(get_create_invoice))
+            .route("/pay-on-chain", post(post_pay_on_chain))
+            .route("/close-all", post(post_close_all))
+            .with_state(state);
+
+        let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
+
+        let port = 8086;
+
+        let listen_addr = SocketAddr::new(std::net::IpAddr::V4(ip), port);
+
+        tokio::spawn(async move {
+            if let Err(err) = axum::Server::bind(&listen_addr)
+                .serve(mint_service.into_make_service())
+                .await
+            {
+                warn!("{:?}", err)
+            }
+        });
+
         Ok(Self {
             node: node.clone(),
             db: db.clone(),
@@ -74,8 +110,6 @@ pub struct CloseChannelRequest {
     channel_id: String,
 }
 
-// impl LnNodeProcessor for Ldk {}
-
 /*
 async fn post_close_channel(
     State(state): State<LdkState>,
@@ -88,196 +122,34 @@ async fn post_close_channel(
 
 */
 
-#[async_trait]
-impl NodeManager for Ldk {
-    type LnBackend = Arc<Ldk>;
+async fn post_close_all(State(state): State<LdkState>) -> Result<(), Error> {
+    let channels = state.node.list_channels();
+    let channels: Vec<(ldk_node::ChannelId, PublicKey)> = channels
+        .into_iter()
+        .map(|c| (c.channel_id, c.counterparty_node_id))
+        .collect();
 
-    async fn start_node_manager(&self, settings: &Settings) -> Result<(), Error> {
-        // TODO: These should be authed
-
-        let self_clone = Arc::new(self.clone());
-        let mint_service = Router::new()
-            .route("/fund", get(Self::get_funding_address))
-            .route("/open-channel", post(Self::post_new_open_channel))
-            .route("/list-channels", get(Self::get_list_channels))
-            .route("/balance", get(Self::get_balance))
-            .route("/close-all", post(Self::post_close_all))
-            .route("/pay-invoice", post(Self::post_pay_invoice))
-            .route("/pay-on-chain", post(Self::post_pay_on_chain))
-            .route("/pay-keysend", post(Self::post_pay_keysend))
-            .route("/invoice", get(Self::get_create_invoice))
-            .with_state(self_clone);
-
-        let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
-
-        let port = 8086;
-
-        let listen_addr = SocketAddr::new(std::net::IpAddr::V4(ip), port);
-
-        warn!("Sratting node");
-
-        axum::Server::bind(&listen_addr)
-            .serve(mint_service.into_make_service())
-            .await
-            .map_err(|_| Error::AxumError)?;
-
-        Ok(())
+    for (id, peer) in channels {
+        state.node.close_channel(&id, peer).unwrap();
     }
 
-    async fn get_funding_address(
-        State(state): State<Self::LnBackend>,
-    ) -> Result<Json<FundingAddressResponse>, Error> {
-        let on_chain_balance = state.node.new_onchain_address()?;
-
-        Ok(Json(FundingAddressResponse {
-            address: on_chain_balance.to_string(),
-        }))
-    }
-
-    async fn post_new_open_channel(
-        State(state): State<Self::LnBackend>,
-        Json(payload): Json<OpenChannelRequest>,
-    ) -> Result<StatusCode, Error> {
-        let OpenChannelRequest {
-            public_key,
-            ip,
-            port,
-            amount,
-            push_amount,
-        } = payload;
-
-        // TODO: Check if node has sufficient onchain balance
-
-        let peer_ip = Ipv4Addr::from_str(&ip)?;
-
-        let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
-
-        let net_address = NetAddress::from(peer_addr);
-
-        if let Err(err) = state.node.connect_open_channel(
-            public_key,
-            net_address,
-            amount,
-            push_amount,
-            None,
-            true,
-        ) {
-            warn!("{:?}", err);
-        };
-        Ok(StatusCode::OK)
-    }
-
-    async fn get_list_channels(
-        State(state): State<Self::LnBackend>,
-    ) -> Result<Json<Vec<ChannelInfo>>, Error> {
-        let channel_info = state.node.list_channels();
-
-        Ok(Json(channel_info.into_iter().map(|c| c.into()).collect()))
-    }
-
-    async fn get_balance(
-        State(state): State<Self::LnBackend>,
-    ) -> Result<Json<BalanceResponse>, Error> {
-        let on_chain_total = Amount::from_sat(state.node.total_onchain_balance_sats().unwrap());
-        let on_chain_spendable =
-            Amount::from_sat(state.node.spendable_onchain_balance_sats().unwrap());
-        let channel_info = state.node.list_channels();
-
-        let ln = channel_info.into_iter().fold(Amount::ZERO, |acc, c| {
-            Amount::from_msat(c.balance_msat) + acc
-        });
-
-        Ok(Json(BalanceResponse {
-            on_chain_spendable,
-            on_chain_total,
-            ln,
-        }))
-    }
-
-    async fn post_close_all(State(state): State<Self::LnBackend>) -> Result<(), Error> {
-        let channels = state.node.list_channels();
-        let channels: Vec<(ldk_node::ChannelId, PublicKey)> = channels
-            .into_iter()
-            .map(|c| (c.channel_id, c.counterparty_node_id))
-            .collect();
-
-        for (id, peer) in channels {
-            state.node.close_channel(&id, peer).unwrap();
-        }
-
-        Ok(())
-    }
-
-    async fn post_pay_invoice(
-        State(state): State<Self::LnBackend>,
-        Json(payload): Json<Bolt11>,
-    ) -> Result<Json<PayInvoiceResponse>, Error> {
-        let p = payload.bolt11.payment_hash();
-
-        let node = state.node.clone();
-        let bolt11 = payload.bolt11.clone();
-        let _: JoinHandle<Result<(), Error>> = tokio::spawn(async move {
-            let _res = node.send_payment(&bolt11.clone())?;
-            Ok(())
-        });
-
-        let res = PayInvoiceResponse {
-            paymnet_hash: Sha256::from_str(&p.to_string())?,
-            status: InvoiceStatus::InFlight,
-        };
-
-        Ok(Json(res))
-    }
-
-    async fn post_pay_on_chain(
-        State(state): State<Self::LnBackend>,
-        Json(payload): Json<PayOnChainRequest>,
-    ) -> Result<Json<String>, Error> {
-        let address = Address::from_str(&payload.address).unwrap();
-        let res = state.node.send_to_onchain_address(&address, payload.sat)?;
-
-        Ok(Json(res.to_string()))
-    }
-
-    async fn post_pay_keysend(
-        State(state): State<Self::LnBackend>,
-        Json(payload): Json<KeysendRequest>,
-    ) -> Result<Json<String>, Error> {
-        let res = state
-            .node
-            .send_spontaneous_payment(payload.amount, payload.pubkey)
-            .unwrap();
-
-        Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
-    }
-
-    async fn get_create_invoice(
-        State(state): State<Self::LnBackend>,
-        Query(params): Query<CreateInvoiceParams>,
-    ) -> Result<Json<Bolt11>, Error> {
-        let CreateInvoiceParams { msat, description } = params;
-
-        let description = match description {
-            Some(des) => des,
-            None => {
-                // TODO: Get default from config
-                "Hello World".to_string()
-            }
-        };
-
-        let invoice = state
-            .node
-            .receive_payment(msat, &description, SECS_IN_DAY)
-            .unwrap();
-
-        Ok(Json(Bolt11 { bolt11: invoice }))
-    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayOnChainRequest {
     sat: u64,
     address: String,
+}
+
+async fn post_pay_on_chain(
+    State(state): State<LdkState>,
+    Json(payload): Json<PayOnChainRequest>,
+) -> Result<Json<String>, Error> {
+    let address = Address::from_str(&payload.address).unwrap();
+    let res = state.node.send_to_onchain_address(&address, payload.sat)?;
+
+    Ok(Json(res.to_string()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -291,16 +163,71 @@ pub struct KeysendRequest {
     pubkey: PublicKey,
 }
 
+async fn post_pay_keysend(
+    State(state): State<LdkState>,
+    Json(payload): Json<KeysendRequest>,
+) -> Result<Json<String>, Error> {
+    let res = state
+        .node
+        .send_spontaneous_payment(payload.amount, payload.pubkey)
+        .unwrap();
+
+    Ok(Json(String::from_utf8(res.0.to_vec()).unwrap()))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayInvoiceResponse {
     paymnet_hash: Sha256,
     status: InvoiceStatus,
 }
 
+async fn post_pay_invoice(
+    State(state): State<LdkState>,
+    Json(payload): Json<Bolt11>,
+) -> Result<Json<PayInvoiceResponse>, Error> {
+    let p = payload.bolt11.payment_hash();
+
+    let node = state.node.clone();
+    let bolt11 = payload.bolt11.clone();
+    let _: JoinHandle<Result<(), Error>> = tokio::spawn(async move {
+        let _res = node.send_payment(&bolt11.clone())?;
+        Ok(())
+    });
+
+    let res = PayInvoiceResponse {
+        paymnet_hash: Sha256::from_str(&p.to_string())?,
+        status: InvoiceStatus::InFlight,
+    };
+
+    Ok(Json(res))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInvoiceParams {
     msat: u64,
     description: Option<String>,
+}
+
+async fn get_create_invoice(
+    State(state): State<LdkState>,
+    Query(params): Query<CreateInvoiceParams>,
+) -> Result<Json<Bolt11>, Error> {
+    let CreateInvoiceParams { msat, description } = params;
+
+    let description = match description {
+        Some(des) => des,
+        None => {
+            // TODO: Get default from config
+            "Hello World".to_string()
+        }
+    };
+
+    let invoice = state
+        .node
+        .receive_payment(msat, &description, SECS_IN_DAY)
+        .unwrap();
+
+    Ok(Json(Bolt11 { bolt11: invoice }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,25 +249,87 @@ impl From<ChannelDetails> for ChannelInfo {
     }
 }
 
+async fn get_list_channels(State(state): State<LdkState>) -> Result<Json<Vec<ChannelInfo>>, Error> {
+    let channel_info = state.node.list_channels();
+
+    Ok(Json(channel_info.into_iter().map(|c| c.into()).collect()))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BalanceResponse {
+struct BalanceResponse {
     on_chain_spendable: Amount,
     on_chain_total: Amount,
     ln: Amount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FundingAddressResponse {
-    address: String,
+async fn get_balances(State(state): State<LdkState>) -> Result<Json<BalanceResponse>, Error> {
+    let on_chain_total = Amount::from_sat(state.node.total_onchain_balance_sats().unwrap());
+    let on_chain_spendable = Amount::from_sat(state.node.spendable_onchain_balance_sats().unwrap());
+    let channel_info = state.node.list_channels();
+
+    let ln = channel_info.into_iter().fold(Amount::ZERO, |acc, c| {
+        Amount::from_msat(c.balance_msat) + acc
+    });
+
+    Ok(Json(BalanceResponse {
+        on_chain_spendable,
+        on_chain_total,
+        ln,
+    }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenChannelRequest {
+struct FundingAddressResponse {
+    address: String,
+}
+
+async fn get_funding_address(
+    State(state): State<LdkState>,
+) -> Result<Json<FundingAddressResponse>, Error> {
+    let on_chain_balance = state.node.new_onchain_address()?;
+
+    Ok(Json(FundingAddressResponse {
+        address: on_chain_balance.to_string(),
+    }))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenChannelRequest {
     public_key: PublicKey,
     ip: String,
     port: u16,
     amount: u64,
     push_amount: Option<u64>,
+}
+
+async fn post_new_open_channel(
+    State(state): State<LdkState>,
+    Json(payload): Json<OpenChannelRequest>,
+) -> Result<StatusCode, Error> {
+    let OpenChannelRequest {
+        public_key,
+        ip,
+        port,
+        amount,
+        push_amount,
+    } = payload;
+
+    // TODO: Check if node has sufficient onchain balance
+
+    let peer_ip = Ipv4Addr::from_str(&ip)?;
+
+    let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
+
+    let net_address = NetAddress::from(peer_addr);
+
+    if let Err(err) =
+        state
+            .node
+            .connect_open_channel(public_key, net_address, amount, push_amount, None, true)
+    {
+        warn!("{:?}", err);
+    };
+    Ok(StatusCode::OK)
 }
 
 #[async_trait]
