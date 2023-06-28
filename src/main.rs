@@ -84,15 +84,27 @@ async fn main() -> anyhow::Result<()> {
     let mint = Arc::new(Mutex::new(mint));
 
     let ln = match settings.ln.ln_backend {
-        LnBackend::Cln => Ln {
-            ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await),
-        },
-        LnBackend::Greenlight => Ln {
-            ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
-        },
-        LnBackend::Ldk => Ln {
-            ln_processor: Arc::new(Ldk::new(&settings, db.clone()).await?),
-        },
+        LnBackend::Cln => {
+            let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await);
+            Ln {
+                ln_processor: cln.clone(),
+                node_manager: ln::Nodemanger::Cln(cln),
+            }
+        }
+        LnBackend::Greenlight => {
+            let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await);
+            Ln {
+                ln_processor: gln.clone(),
+                node_manager: ln::Nodemanger::Greenlight(gln),
+            }
+        }
+        LnBackend::Ldk => {
+            let ldk = Arc::new(Ldk::new(&settings, db.clone()).await?);
+            Ln {
+                ln_processor: ldk.clone(),
+                node_manager: ln::Nodemanger::Ldk(ldk),
+            }
+        }
     };
 
     let ln_clone = ln.clone();
@@ -104,7 +116,18 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let mint_info = MintInfo::from(settings.mint_info);
+    let mint_info = MintInfo::from(settings.mint_info.clone());
+    let ln_clone = ln.clone();
+
+    let settings_clone = settings.clone();
+    tokio::spawn(async move {
+        warn!("Starting");
+        loop {
+            if let Err(err) = ln_clone.node_manager.start_server(&settings_clone).await {
+                warn!("{:?}", err)
+            }
+        }
+    });
 
     let state = MintState {
         db,
@@ -130,7 +153,6 @@ async fn main() -> anyhow::Result<()> {
     let port = settings.info.listen_port;
 
     let listen_addr = SocketAddr::new(std::net::IpAddr::V4(ip), port);
-
     axum::Server::bind(&listen_addr)
         .serve(mint_service.into_make_service())
         .await?;
@@ -278,6 +300,7 @@ async fn post_mint(
         InvoiceStatus::Expired => {
             return Err(Error::InvoiceExpired);
         }
+        InvoiceStatus::InFlight => {}
     }
 
     let mut mint = state.mint.lock().await;

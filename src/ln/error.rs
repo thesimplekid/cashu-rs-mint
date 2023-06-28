@@ -18,7 +18,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StatusCode(code) => write!(f, "{}", code.as_str()),
-            Self::SerdeError(code) => write!(f, "{}", code.to_string()),
+            Self::SerdeError(code) => write!(f, "{}", code),
             Self::Custom(code) => write!(f, "{}", code),
         }
     }
