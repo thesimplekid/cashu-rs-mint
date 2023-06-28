@@ -20,7 +20,6 @@ use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
 use cashu_crab::nuts::*;
 use cashu_crab::{mint::Mint, Sha256};
 use ln::cln::fee_reserve;
-use ln::greenlight::Greenlight;
 use ln::ldk::Ldk;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use log::{debug, warn};
@@ -32,7 +31,7 @@ use utils::unix_time;
 use crate::config::LnBackend;
 use crate::database::Db;
 use crate::error::Error;
-use crate::ln::cln::Cln;
+use crate::ln::NodeManager;
 
 mod config;
 mod database;
@@ -84,15 +83,30 @@ async fn main() -> anyhow::Result<()> {
     let mint = Arc::new(Mutex::new(mint));
 
     let ln = match settings.ln.ln_backend {
-        LnBackend::Cln => Ln {
-            ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await),
-        },
-        LnBackend::Greenlight => Ln {
-            ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
-        },
-        LnBackend::Ldk => Ln {
-            ln_processor: Arc::new(Ldk::new(&settings, db.clone()).await?),
-        },
+        LnBackend::Cln => {
+            todo!();
+            /*
+            Ln {
+                ln_processor: Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await),
+            }
+            */
+        }
+        LnBackend::Greenlight => {
+            todo!();
+            /*
+            Ln {
+                ln_processor: Arc::new(Greenlight::new(db.clone(), mint.clone()).await),
+            }
+            */
+        }
+        LnBackend::Ldk => {
+            let ldk = Arc::new(Ldk::new(&settings, db.clone()).await?);
+            let ldk_clone = Arc::clone(&ldk);
+            Ln {
+                ln_processor: ldk,
+                ln_manager: ldk_clone,
+            }
+        }
     };
 
     let ln_clone = ln.clone();
@@ -104,7 +118,23 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let mint_info = MintInfo::from(settings.mint_info);
+    let mint_info = MintInfo::from(settings.clone().mint_info);
+    let ln_clone = ln.clone();
+
+    let settings_clone = settings.clone();
+
+    tokio::spawn(async move {
+        loop {
+            warn!("Started");
+            if let Err(err) = ln_clone
+                .ln_manager
+                .start_node_manager(&settings_clone)
+                .await
+            {
+                warn!("{}", err);
+            }
+        }
+    });
 
     let state = MintState {
         db,
@@ -277,6 +307,9 @@ async fn post_mint(
         }
         InvoiceStatus::Expired => {
             return Err(Error::InvoiceExpired);
+        }
+        InvoiceStatus::InFlight => {
+            return Err(Error::StatusCode(StatusCode::INTERNAL_SERVER_ERROR));
         }
     }
 

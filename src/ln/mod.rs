@@ -1,12 +1,24 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    Json,
+};
 use cashu_crab::{lightning_invoice::Invoice, Amount, Sha256};
 use cln_rpc::model::responses::ListinvoicesInvoicesStatus;
 use gl_client::pb::cln::listinvoices_invoices::ListinvoicesInvoicesStatus as GL_ListInvoiceStatus;
 use serde::{Deserialize, Serialize};
 
 pub use error::Error;
+
+use crate::config::Settings;
+
+use self::ldk::{
+    BalanceResponse, Bolt11, ChannelInfo, CreateInvoiceParams, FundingAddressResponse,
+    KeysendRequest, Ldk, OpenChannelRequest, PayInvoiceResponse, PayOnChainRequest,
+};
 
 pub mod cln;
 pub mod error;
@@ -21,7 +33,10 @@ pub struct Ln {
     // pub ln_rx: Arc<tokio::sync::broadcast::Receiver<LnMessage>>,
     /// Ln Processor
     pub ln_processor: Arc<dyn LnProcessor>,
+    pub ln_manager: Arc<Ldk>,
 }
+
+// trait LnNodeProcessor: LnProcessor + NodeManager<LnBackend = Arc<ldk::Ldk>> {}
 
 /// Possible states of an invoice
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -120,6 +135,52 @@ impl InvoiceInfo {
     pub fn as_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(self)?)
     }
+}
+
+#[async_trait]
+pub trait NodeManager: Send + Sync {
+    type LnBackend;
+
+    async fn start_node_manager(&self, settings: &Settings) -> Result<(), Error>;
+
+    async fn get_funding_address(
+        State(state): State<Self::LnBackend>,
+    ) -> Result<Json<FundingAddressResponse>, Error>;
+
+    async fn post_new_open_channel(
+        State(state): State<Self::LnBackend>,
+        Json(payload): Json<OpenChannelRequest>,
+    ) -> Result<StatusCode, Error>;
+
+    async fn get_list_channels(
+        State(state): State<Self::LnBackend>,
+    ) -> Result<Json<Vec<ChannelInfo>>, Error>;
+
+    async fn get_balance(
+        State(state): State<Self::LnBackend>,
+    ) -> Result<Json<BalanceResponse>, Error>;
+
+    async fn post_close_all(State(state): State<Self::LnBackend>) -> Result<(), Error>;
+
+    async fn post_pay_invoice(
+        State(state): State<Self::LnBackend>,
+        Json(payload): Json<Bolt11>,
+    ) -> Result<Json<PayInvoiceResponse>, Error>;
+
+    async fn post_pay_on_chain(
+        State(state): State<Self::LnBackend>,
+        Json(payload): Json<PayOnChainRequest>,
+    ) -> Result<Json<String>, Error>;
+
+    async fn post_pay_keysend(
+        State(state): State<Self::LnBackend>,
+        Json(payload): Json<KeysendRequest>,
+    ) -> Result<Json<String>, Error>;
+
+    async fn get_create_invoice(
+        State(state): State<Self::LnBackend>,
+        Query(params): Query<CreateInvoiceParams>,
+    ) -> Result<Json<Bolt11>, Error>;
 }
 
 #[async_trait]

@@ -10,6 +10,7 @@ pub enum Error {
     StatusCode(StatusCode),
     SerdeError(serde_json::Error),
     Custom(String),
+    AxumError,
 }
 
 impl std::error::Error for Error {}
@@ -19,6 +20,7 @@ impl fmt::Display for Error {
         match self {
             Self::StatusCode(code) => write!(f, "{}", code.as_str()),
             Self::SerdeError(code) => write!(f, "{}", code.to_string()),
+            Self::AxumError => write!(f, "Axum error"),
             Self::Custom(code) => write!(f, "{}", code),
         }
     }
@@ -105,6 +107,7 @@ impl IntoResponse for Error {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
             }
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
+            Self::AxumError => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
         }
     }
 }
