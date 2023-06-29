@@ -120,8 +120,8 @@ async fn main() -> anyhow::Result<()> {
     let ln_clone = ln.clone();
 
     let settings_clone = settings.clone();
+
     tokio::spawn(async move {
-        warn!("Starting");
         loop {
             if let Err(err) = ln_clone.node_manager.start_server(&settings_clone).await {
                 warn!("{:?}", err)

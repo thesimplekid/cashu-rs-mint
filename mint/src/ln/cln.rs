@@ -17,10 +17,10 @@ use log::{debug, warn};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
+
 use crate::database::Db;
 use crate::utils::unix_time;
-
-use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
 
 #[derive(Clone)]
 pub struct Cln {
