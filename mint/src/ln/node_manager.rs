@@ -5,16 +5,18 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cashu_crab::{lightning_invoice::Invoice, Amount, Sha256};
+use cashu_crab::{lightning_invoice::Invoice, types, Amount, Sha256};
 use ldk_node::bitcoin::secp256k1::PublicKey;
 use ldk_node::bitcoin::util::address::Address;
-use ldk_node::NetAddress;
+use ldk_node::{ChannelDetails, NetAddress};
 use log::warn;
-use serde::{Deserialize, Serialize};
+use node_manager_types::responses::ChannelInfo;
+use node_manager_types::{requests, responses, Bolt11};
 use std::net::{Ipv4Addr, SocketAddr};
+use tower_http::cors::CorsLayer;
 
 pub use super::error::Error;
-use super::{cln, greenlight, ldk, InvoiceStatus};
+use super::{cashu_crab_invoice, cln, greenlight, ldk, InvoiceStatus};
 
 use crate::config::Settings;
 
@@ -34,13 +36,14 @@ impl Nodemanger {
         let node_manager_service = Router::new()
             .route("/fund", get(get_funding_address))
             .route("/open-channel", post(post_new_open_channel))
-            .route("/list-channels", get(get_list_channels))
+            .route("/channels", get(get_list_channels))
             .route("/balance", get(get_balance))
             .route("/pay-invoice", post(post_pay_invoice))
             .route("/pay-keysend", post(post_pay_keysend))
             .route("/invoice", get(get_create_invoice))
             .route("/pay-on-chain", post(post_pay_on_chain))
             .route("/close-all", post(post_close_all))
+            .layer(CorsLayer::permissive())
             .with_state(manager);
 
         let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
@@ -88,10 +91,16 @@ impl Nodemanger {
                 let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
 
                 let net_address = NetAddress::from(peer_addr);
+                let node_pubkey =
+                    ldk_node::bitcoin::secp256k1::PublicKey::from_slice(&public_key.serialize())
+                        .unwrap();
+
+                let push_amount = push_amount.map(|a| a.to_msat());
+
                 let _ = ldk.node.connect_open_channel(
-                    public_key,
+                    node_pubkey,
                     net_address,
-                    amount,
+                    amount.into(),
                     push_amount,
                     None,
                     true,
@@ -108,7 +117,10 @@ impl Nodemanger {
             Nodemanger::Ldk(ldk) => {
                 let channels_details = ldk.node.list_channels();
 
-                let channel_info = channels_details.into_iter().map(|c| c.into()).collect();
+                let channel_info = channels_details
+                    .into_iter()
+                    .map(|c| channel_info_from_details(c))
+                    .collect();
                 Ok(channel_info)
             }
             Nodemanger::Cln(_cln) => todo!(),
@@ -152,7 +164,7 @@ impl Nodemanger {
 
                 let res = responses::PayInvoiceResponse {
                     paymnet_hash: Sha256::from_str(&p.to_string())?,
-                    status: InvoiceStatus::InFlight,
+                    status: cashu_crab_invoice(InvoiceStatus::InFlight),
                 };
 
                 Ok(res)
@@ -168,9 +180,13 @@ impl Nodemanger {
     ) -> Result<String, Error> {
         match &self {
             Nodemanger::Ldk(ldk) => {
+                let node_pubkey = ldk_node::bitcoin::secp256k1::PublicKey::from_slice(
+                    keysend_request.pubkey.to_string().as_bytes(),
+                )
+                .unwrap();
                 let res = ldk
                     .node
-                    .send_spontaneous_payment(keysend_request.amount, keysend_request.pubkey)?;
+                    .send_spontaneous_payment(keysend_request.amount, node_pubkey)?;
 
                 Ok(String::from_utf8(res.0.to_vec()).unwrap())
             }
@@ -244,88 +260,6 @@ impl Nodemanger {
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
-}
-
-mod requests {
-    use ldk_node::bitcoin::secp256k1::PublicKey;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct CreateInvoiceParams {
-        pub msat: u64,
-        pub description: Option<String>,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct KeysendRequest {
-        pub amount: u64,
-        pub pubkey: PublicKey,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct OpenChannelRequest {
-        pub public_key: PublicKey,
-        pub ip: String,
-        pub port: u16,
-        pub amount: u64,
-        pub push_amount: Option<u64>,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct PayOnChainRequest {
-        pub sat: u64,
-        pub address: String,
-    }
-}
-
-mod responses {
-    use cashu_crab::{Amount, Sha256};
-    use ldk_node::bitcoin::secp256k1::PublicKey;
-    use ldk_node::ChannelDetails;
-    use serde::{Deserialize, Serialize};
-
-    use crate::ln::InvoiceStatus;
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct PayInvoiceResponse {
-        pub paymnet_hash: Sha256,
-        pub status: InvoiceStatus,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct FundingAddressResponse {
-        pub address: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct BalanceResponse {
-        pub on_chain_spendable: Amount,
-        pub on_chain_total: Amount,
-        pub ln: Amount,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct ChannelInfo {
-        pub peer_pubkey: PublicKey,
-        pub balance: Amount,
-        pub value: Amount,
-        pub is_usable: bool,
-    }
-
-    impl From<ChannelDetails> for ChannelInfo {
-        fn from(channel_details: ChannelDetails) -> Self {
-            Self {
-                peer_pubkey: channel_details.counterparty_node_id,
-                balance: Amount::from_msat(channel_details.balance_msat),
-                value: Amount::from_sat(channel_details.channel_value_sats),
-                is_usable: channel_details.is_usable,
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Bolt11 {
-    bolt11: Invoice,
 }
 
 async fn post_pay_keysend(
@@ -402,4 +336,15 @@ async fn post_close_all(State(state): State<Nodemanger>) -> Result<StatusCode, E
     state.close_all().await?;
 
     Ok(StatusCode::OK)
+}
+
+pub fn channel_info_from_details(details: ChannelDetails) -> ChannelInfo {
+    let peer_pubkey =
+        bitcoin::secp256k1::PublicKey::from_str(&details.counterparty_node_id.to_string()).unwrap();
+    ChannelInfo {
+        peer_pubkey,
+        balance: Amount::from_msat(details.balance_msat),
+        value: Amount::from_sat(details.channel_value_sats),
+        is_usable: details.is_usable,
+    }
 }

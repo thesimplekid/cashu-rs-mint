@@ -19,6 +19,7 @@ pub struct Ln {
     pub ln_processor: Arc<dyn LnProcessor>,
     pub node_manager: node_manager::Nodemanger,
 }
+
 /// Possible states of an invoice
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub enum InvoiceStatus {
@@ -55,6 +56,26 @@ impl From<ldk_node::PaymentStatus> for InvoiceStatus {
             ldk_node::PaymentStatus::Succeeded => Self::Paid,
             ldk_node::PaymentStatus::Failed => Self::Expired,
         }
+    }
+}
+
+impl From<cashu_crab::types::InvoiceStatus> for InvoiceStatus {
+    fn from(status: cashu_crab::types::InvoiceStatus) -> Self {
+        match status {
+            cashu_crab::types::InvoiceStatus::Unpaid => Self::Unpaid,
+            cashu_crab::types::InvoiceStatus::Paid => Self::Paid,
+            cashu_crab::types::InvoiceStatus::Expired => Self::Expired,
+            cashu_crab::types::InvoiceStatus::InFlight => Self::InFlight,
+        }
+    }
+}
+
+pub fn cashu_crab_invoice(invoice: InvoiceStatus) -> cashu_crab::types::InvoiceStatus {
+    match invoice {
+        InvoiceStatus::Unpaid => cashu_crab::types::InvoiceStatus::Unpaid,
+        InvoiceStatus::Paid => cashu_crab::types::InvoiceStatus::Paid,
+        InvoiceStatus::Expired => cashu_crab::types::InvoiceStatus::Expired,
+        InvoiceStatus::InFlight => cashu_crab::types::InvoiceStatus::InFlight,
     }
 }
 

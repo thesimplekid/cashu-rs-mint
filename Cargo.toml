@@ -2,6 +2,7 @@
 
 members = [
     "mint",
+    "types"
 ]
 
 [workspace.metadata]
@@ -9,6 +10,6 @@ authors = ["thesimplekid"]
 edition = "2021"
 description = "cashu-rs-mint"
 readme = "README.md"
-repository = "https://github.com/thesimplekidcashu-rs-mint"
+repository = "https://github.com/thesimplekid/cashu-rs-mint"
 license-file = "LICENSE"
 keywords = ["bitcoin", "e-cash", "cashu"]

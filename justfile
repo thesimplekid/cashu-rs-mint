@@ -1,2 +1,6 @@
 run-mint:
-  cargo run cashu-rs-mint
+  cargo run --bin cashu-rs-mint
+
+run-manager:
+  trunk serve mint-manager/index.html
+  

@@ -1,0 +1,11 @@
+[package]
+name = "node-manager-types"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0.164", features = ["derive"] }
+cashu-crab = {path = "../../cashu-crab"}
+bitcoin = { version = "0.30.0", features = ["no-std"] }
