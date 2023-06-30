@@ -60,6 +60,7 @@ pub mod responses {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ChannelInfo {
         pub peer_pubkey: PublicKey,
+        pub channel_id: Vec<u8>,
         pub balance: Amount,
         pub value: Amount,
         pub is_usable: bool,

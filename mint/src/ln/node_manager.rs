@@ -5,7 +5,7 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cashu_crab::{lightning_invoice::Invoice, types, Amount, Sha256};
+use cashu_crab::{Amount, Sha256};
 use ldk_node::bitcoin::secp256k1::PublicKey;
 use ldk_node::bitcoin::util::address::Address;
 use ldk_node::{ChannelDetails, NetAddress};
@@ -343,6 +343,7 @@ pub fn channel_info_from_details(details: ChannelDetails) -> ChannelInfo {
         bitcoin::secp256k1::PublicKey::from_str(&details.counterparty_node_id.to_string()).unwrap();
     ChannelInfo {
         peer_pubkey,
+        channel_id: details.channel_id.0.to_vec(),
         balance: Amount::from_msat(details.balance_msat),
         value: Amount::from_sat(details.channel_value_sats),
         is_usable: details.is_usable,

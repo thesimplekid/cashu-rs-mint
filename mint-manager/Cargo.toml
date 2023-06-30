@@ -1,0 +1,24 @@
+[package]
+name = "trunk-template"
+version = "0.1.0"
+edition = "2021"
+description = "Template for starting a Yew project using Trunk"
+readme = "README.md"
+repository = "https://github.com/yewstack/yew-trunk-minimal-template"
+license = "MIT OR Apache-2.0"
+keywords = ["yew", "trunk"]
+categories = ["gui", "wasm", "web-programming"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+node-manager-types = { path = "../types" }
+gloo-net = "0.3.0"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.99"
+wasm-bindgen-futures = "0.4.37"
+yew = { version="0.20", features=["csr"] }
+bitcoin = { version = "0.30.0", features = ["no-std"] }
+cashu-crab = {path ="../../cashu-crab"}
+log = "0.4.19"
+wasm-logger = "0.2.0"
+web-sys = "0.3.64"
