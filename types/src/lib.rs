@@ -32,6 +32,12 @@ pub mod requests {
         pub sat: u64,
         pub address: String,
     }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct CloseChannel {
+        pub channel_id: Vec<u8>,
+        pub peer_id: Option<PublicKey>,
+    }
 }
 
 pub mod responses {

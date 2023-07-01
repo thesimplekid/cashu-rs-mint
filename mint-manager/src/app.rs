@@ -3,14 +3,17 @@ use std::str::FromStr;
 use bitcoin::secp256k1::PublicKey;
 use cashu_crab::{Amount, Invoice};
 use gloo_net::http::Request;
+use node_manager_types::requests;
 use node_manager_types::{
     requests::OpenChannelRequest,
-    responses::{BalanceResponse, ChannelInfo, FundingAddressResponse, PayInvoiceResponse},
+    responses::{BalanceResponse, ChannelInfo, FundingAddressResponse},
     Bolt11,
 };
 use serde_json::Value;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
+
+use crate::components::channel::Channel;
 
 #[function_component(Balance)]
 pub fn balance() -> HtmlResult {
@@ -78,6 +81,33 @@ pub fn channels() -> Html {
         );
     }
 
+    let delete_channel = {
+        let channels = channels.clone();
+        Callback::from(move |(pubkey, channel_id)| {
+            log::debug!("{:?}", pubkey);
+            log::debug!("{:?}", channel_id);
+
+            let close_channel_request = requests::CloseChannel {
+                channel_id,
+                peer_id: pubkey,
+            };
+
+            post_close_channel(close_channel_request);
+            let channels = channels.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let fetched_channels: Vec<ChannelInfo> =
+                    Request::get("http://127.0.0.1:8086/channels")
+                        .send()
+                        .await
+                        .unwrap()
+                        .json()
+                        .await
+                        .unwrap();
+                channels.set(fetched_channels);
+            });
+        })
+    };
+
     html! {
         <>
     <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
@@ -87,16 +117,29 @@ pub fn channels() -> Html {
              channels.iter().map(|channel| {
 
                 let remote_balance = channel.value - channel.balance;
+
                 html!{
-        <a class="block max-w-sm p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
-            <p class="font-normal text-gray-700 dark:text-gray-400">{format!("Local Balance: {}", channel.balance.to_sat())}</p>
-            <p class="font-normal text-gray-700 dark:text-gray-400">{format!("Remote Balance: {}", remote_balance.to_sat())}</p>
-        </a>
+                    <Channel delete_channel={delete_channel.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance}/>
             }}).collect::<Html>()
     }
         </a>
         </>
         }
+}
+
+fn post_close_channel(close_channel_request: requests::CloseChannel) {
+    wasm_bindgen_futures::spawn_local(async move {
+        let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/close")
+            .json(&close_channel_request)
+            .unwrap()
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        log::debug!("{:?}", _fetched_channels);
+    });
 }
 
 fn post_pay_invoice(pay_invoice_request: Bolt11) {

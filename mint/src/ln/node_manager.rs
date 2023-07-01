@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use cashu_crab::{Amount, Sha256};
 use ldk_node::bitcoin::secp256k1::PublicKey;
 use ldk_node::bitcoin::util::address::Address;
-use ldk_node::{ChannelDetails, NetAddress};
+use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use log::warn;
 use node_manager_types::responses::ChannelInfo;
 use node_manager_types::{requests, responses, Bolt11};
@@ -42,6 +42,7 @@ impl Nodemanger {
             .route("/pay-keysend", post(post_pay_keysend))
             .route("/invoice", get(get_create_invoice))
             .route("/pay-on-chain", post(post_pay_on_chain))
+            .route("/close", post(post_close_channel))
             .route("/close-all", post(post_close_all))
             .layer(CorsLayer::permissive())
             .with_state(manager);
@@ -260,6 +261,38 @@ impl Nodemanger {
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
+
+    pub async fn close(&self, close_channel_request: requests::CloseChannel) -> Result<(), Error> {
+        match &self {
+            Nodemanger::Ldk(ldk) => {
+                let channel_id: [u8; 32] = close_channel_request
+                    .channel_id
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
+                let channel_id = ChannelId(channel_id);
+
+                let peer_id =
+                    PublicKey::from_str(&close_channel_request.peer_id.unwrap().to_string())
+                        .unwrap();
+
+                ldk.node.close_channel(&channel_id, peer_id)?;
+
+                Ok(())
+            }
+            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Greenlight(_gln) => todo!(),
+        }
+    }
+}
+
+async fn post_close_channel(
+    State(state): State<Nodemanger>,
+    Json(payload): Json<requests::CloseChannel>,
+) -> Result<StatusCode, Error> {
+    state.close(payload).await?;
+
+    Ok(StatusCode::OK)
 }
 
 async fn post_pay_keysend(
