@@ -27,7 +27,7 @@ use node_manager_types::{requests, responses};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::{Error, InvoiceInfo, LnProcessor};
+use super::{Error, InvoiceInfo, LnNodeManager, LnProcessor};
 
 use crate::database::Db;
 use crate::utils::unix_time;
@@ -249,8 +249,9 @@ pub fn fee_reserve(invoice_amount: Amount) -> Amount {
     Amount::from(fee_reserse)
 }
 
-impl Cln {
-    pub async fn new_onchain_address(&self) -> Result<Address, Error> {
+#[async_trait]
+impl LnNodeManager for Cln {
+    async fn new_onchain_address(&self) -> Result<Address, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::NewAddr(NewaddrRequest {
@@ -271,7 +272,7 @@ impl Cln {
         Ok(address)
     }
 
-    pub async fn open_chennel(
+    async fn open_chennel(
         &self,
         open_channel_request: requests::OpenChannelRequest,
     ) -> Result<String, Error> {
@@ -293,7 +294,7 @@ impl Cln {
         Ok(channel_id)
     }
 
-    pub async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
+    async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::ListPeerChannels(
@@ -323,7 +324,7 @@ impl Cln {
         Ok(channels)
     }
 
-    pub async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
+    async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::ListFunds(
@@ -372,10 +373,7 @@ impl Cln {
         Ok(balance)
     }
 
-    pub async fn pay_invoice(
-        &self,
-        bolt11: Bolt11,
-    ) -> Result<responses::PayInvoiceResponse, Error> {
+    async fn pay_invoice(&self, bolt11: Bolt11) -> Result<responses::PayInvoiceResponse, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::Pay(PayRequest {
@@ -415,11 +413,7 @@ impl Cln {
         Ok(response)
     }
 
-    pub async fn create_invoice(
-        &self,
-        amount: Amount,
-        description: String,
-    ) -> Result<Invoice, Error> {
+    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
         let mut cln_client = self.cln_client.lock().await;
 
         let amount_msat = AmountOrAny::Amount(CLN_Amount::from_msat(amount.to_msat()));
@@ -450,7 +444,7 @@ impl Cln {
         Ok(invoice)
     }
 
-    pub async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {
+    async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let satoshi = Some(AmountOrAll::Amount(CLN_Amount::from_sat(amount.to_sat())));
 
@@ -475,7 +469,7 @@ impl Cln {
         Ok(txid)
     }
 
-    pub async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error> {
+    async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error> {
         let mut cln_client = self.cln_client.lock().await;
 
         let destination = peer_id.map(|x| x.to_string());
@@ -503,11 +497,7 @@ impl Cln {
         Ok(())
     }
 
-    pub async fn pay_keysend(
-        &self,
-        destination: PublicKey,
-        amount: Amount,
-    ) -> Result<String, Error> {
+    async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error> {
         let destination =
             cln_rpc::primitives::PublicKey::from_slice(&destination.serialize()).unwrap();
 

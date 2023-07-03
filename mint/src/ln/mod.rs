@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use bitcoin::{secp256k1::PublicKey, Address};
 use cashu_crab::{lightning_invoice::Invoice, Amount, Sha256};
 use cln_rpc::model::responses::ListinvoicesInvoicesStatus;
 use gl_client::pb::cln::listinvoices_invoices::ListinvoicesInvoicesStatus as GL_ListInvoiceStatus;
 use serde::{Deserialize, Serialize};
 
 pub use error::Error;
+use node_manager_types::{requests, responses, Bolt11};
 
 pub mod cln;
 pub mod error;
@@ -157,4 +159,28 @@ pub trait LnProcessor: Send + Sync {
     ) -> Result<(String, Amount), Error>;
 
     async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error>;
+}
+
+#[async_trait]
+pub trait LnNodeManager: Send + Sync {
+    async fn new_onchain_address(&self) -> Result<Address, Error>;
+
+    async fn open_chennel(
+        &self,
+        open_channel_request: requests::OpenChannelRequest,
+    ) -> Result<String, Error>;
+
+    async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error>;
+
+    async fn get_balance(&self) -> Result<responses::BalanceResponse, Error>;
+
+    async fn pay_invoice(&self, bolt11: Bolt11) -> Result<responses::PayInvoiceResponse, Error>;
+
+    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error>;
+
+    async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error>;
+
+    async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error>;
+
+    async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error>;
 }

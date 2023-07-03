@@ -19,6 +19,7 @@ use crate::utils::unix_time;
 use super::Error;
 use super::InvoiceInfo;
 use super::InvoiceStatus;
+use super::LnNodeManager;
 use super::LnProcessor;
 
 const SECS_IN_DAY: u32 = 86400;

@@ -19,6 +19,7 @@ pub use super::error::Error;
 use super::{cashu_crab_invoice, cln, greenlight, ldk, InvoiceStatus};
 
 use crate::config::Settings;
+use crate::ln::LnNodeManager;
 
 const SECS_IN_DAY: u32 = 86400;
 
