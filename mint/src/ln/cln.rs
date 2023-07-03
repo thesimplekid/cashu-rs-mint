@@ -272,7 +272,7 @@ impl LnNodeManager for Cln {
         Ok(address)
     }
 
-    async fn open_chennel(
+    async fn open_channel(
         &self,
         open_channel_request: requests::OpenChannelRequest,
     ) -> Result<String, Error> {

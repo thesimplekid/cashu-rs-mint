@@ -165,7 +165,7 @@ pub trait LnProcessor: Send + Sync {
 pub trait LnNodeManager: Send + Sync {
     async fn new_onchain_address(&self) -> Result<Address, Error>;
 
-    async fn open_chennel(
+    async fn open_channel(
         &self,
         open_channel_request: requests::OpenChannelRequest,
     ) -> Result<String, Error>;

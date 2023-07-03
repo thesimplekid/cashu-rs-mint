@@ -2,20 +2,27 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use bitcoin::Address;
 use bitcoin_hashes::Hash;
 use cashu_crab::Amount;
 use cashu_crab::Sha256;
+use cln_rpc::primitives::PublicKey;
 use ldk_node::bitcoin::Network;
 use ldk_node::io::SqliteStore;
 use ldk_node::lightning_invoice::Invoice;
 use ldk_node::{Builder, Config};
+use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use ldk_node::{Event, Node};
 use log::debug;
+use node_manager_types::responses::ChannelInfo;
+use node_manager_types::{requests, responses, Bolt11};
+use std::net::{Ipv4Addr, SocketAddr};
 
 use crate::config::Settings;
 use crate::database::Db;
 use crate::utils::unix_time;
 
+use super::cashu_crab_invoice;
 use super::Error;
 use super::InvoiceInfo;
 use super::InvoiceStatus;
@@ -138,5 +145,153 @@ impl LnProcessor for Ldk {
             String::from_utf8(payment_hash.0.to_vec())?,
             Amount::from_msat(payment[0].amount_msat.unwrap()),
         ))
+    }
+}
+
+#[async_trait]
+impl LnNodeManager for Ldk {
+    async fn new_onchain_address(&self) -> Result<Address, Error> {
+        let address = self.node.new_onchain_address()?;
+
+        let address = Address::from_str(&address.to_string())
+            .unwrap()
+            .assume_checked();
+
+        Ok(address)
+    }
+
+    async fn open_channel(
+        &self,
+        open_channel_request: requests::OpenChannelRequest,
+    ) -> Result<String, Error> {
+        let requests::OpenChannelRequest {
+            public_key,
+            ip,
+            port,
+            amount,
+            push_amount,
+        } = open_channel_request;
+
+        let peer_ip = Ipv4Addr::from_str(&ip)?;
+
+        let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
+
+        let net_address = NetAddress::from(peer_addr);
+        let node_pubkey =
+            ldk_node::bitcoin::secp256k1::PublicKey::from_slice(&public_key.serialize()).unwrap();
+
+        let push_amount = push_amount.map(|a| a.to_msat());
+
+        let _ = self.node.connect_open_channel(
+            node_pubkey,
+            net_address,
+            amount.into(),
+            push_amount,
+            None,
+            true,
+        );
+
+        // TODO: return correct string
+        Ok("".to_string())
+    }
+
+    async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
+        let channels_details = self.node.list_channels();
+
+        let channel_info = channels_details
+            .into_iter()
+            .map(|c| channel_info_from_details(c))
+            .collect();
+
+        Ok(channel_info)
+    }
+
+    async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
+        let on_chain_total = Amount::from_sat(self.node.total_onchain_balance_sats().unwrap());
+        let on_chain_spendable =
+            Amount::from_sat(self.node.spendable_onchain_balance_sats().unwrap());
+        let channel_info = self.node.list_channels();
+
+        let ln = channel_info.into_iter().fold(Amount::ZERO, |acc, c| {
+            Amount::from_msat(c.balance_msat) + acc
+        });
+
+        Ok(responses::BalanceResponse {
+            on_chain_total,
+            on_chain_spendable,
+            ln,
+        })
+    }
+
+    async fn pay_invoice(&self, bolt11: Bolt11) -> Result<responses::PayInvoiceResponse, Error> {
+        let p = bolt11.bolt11.payment_hash();
+
+        let _res = self.node.send_payment(&bolt11.bolt11)?;
+
+        let res = responses::PayInvoiceResponse {
+            payment_hash: Sha256::from_str(&p.to_string())?,
+            status: cashu_crab_invoice(InvoiceStatus::InFlight),
+        };
+
+        Ok(res)
+    }
+
+    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
+        let invoice = self
+            .node
+            .receive_payment(amount.to_msat(), &description, SECS_IN_DAY)
+            .unwrap();
+
+        Ok(invoice)
+    }
+
+    async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {
+        let address = gl_client::bitcoin::Address::from_str(&address.to_string()).unwrap();
+        let res = self
+            .node
+            .send_to_onchain_address(&address, amount.to_sat())?;
+
+        Ok(res.to_string())
+    }
+
+    async fn close(
+        &self,
+        channel_id: String,
+        peer_id: Option<bitcoin::secp256k1::PublicKey>,
+    ) -> Result<(), Error> {
+        let channel_id: [u8; 32] = channel_id.as_bytes().try_into().unwrap();
+        let channel_id = ChannelId(channel_id);
+
+        let peer_id = PublicKey::from_str(&peer_id.unwrap().to_string()).unwrap();
+
+        self.node.close_channel(&channel_id, peer_id)?;
+
+        Ok(())
+    }
+
+    async fn pay_keysend(
+        &self,
+        destination: bitcoin::secp256k1::PublicKey,
+        amount: Amount,
+    ) -> Result<String, Error> {
+        let pubkey = PublicKey::from_slice(&destination.serialize()).unwrap();
+
+        let res = self
+            .node
+            .send_spontaneous_payment(amount.to_sat(), pubkey)?;
+
+        Ok(String::from_utf8(res.0.to_vec()).unwrap())
+    }
+}
+
+fn channel_info_from_details(details: ChannelDetails) -> ChannelInfo {
+    let peer_pubkey =
+        bitcoin::secp256k1::PublicKey::from_str(&details.counterparty_node_id.to_string()).unwrap();
+    ChannelInfo {
+        peer_pubkey,
+        channel_id: details.channel_id.0.to_vec(),
+        balance: Amount::from_msat(details.balance_msat),
+        value: Amount::from_sat(details.channel_value_sats),
+        is_usable: details.is_usable,
     }
 }
