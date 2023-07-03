@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub enum Error {
     StatusCode(StatusCode),
     Serde(serde_json::Error),
+    WrongClnResponse,
     Custom(String),
 }
 
@@ -19,6 +20,7 @@ impl fmt::Display for Error {
         match self {
             Self::StatusCode(code) => write!(f, "{}", code.as_str()),
             Self::Serde(code) => write!(f, "{}", code),
+            Self::WrongClnResponse => write!(f, "Cln returned the wrong response"),
             Self::Custom(code) => write!(f, "{}", code),
         }
     }
@@ -104,6 +106,7 @@ impl IntoResponse for Error {
             Self::Serde(code) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
             }
+            Self::WrongClnResponse => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
         }
     }

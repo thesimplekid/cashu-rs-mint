@@ -5,9 +5,9 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use bitcoin::Address;
 use cashu_crab::{Amount, Sha256};
 use ldk_node::bitcoin::secp256k1::PublicKey;
-use ldk_node::bitcoin::util::address::Address;
 use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use log::warn;
 use node_manager_types::responses::ChannelInfo;
@@ -43,7 +43,6 @@ impl Nodemanger {
             .route("/invoice", get(get_create_invoice))
             .route("/pay-on-chain", post(post_pay_on_chain))
             .route("/close", post(post_close_channel))
-            .route("/close-all", post(post_close_all))
             .layer(CorsLayer::permissive())
             .with_state(manager);
 
@@ -69,7 +68,12 @@ impl Nodemanger {
                     address: address.to_string(),
                 })
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => {
+                let address = cln.new_onchain_address().await?;
+                Ok(responses::FundingAddressResponse {
+                    address: address.to_string(),
+                })
+            }
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -78,15 +82,16 @@ impl Nodemanger {
         &self,
         open_channel_request: requests::OpenChannelRequest,
     ) -> Result<StatusCode, Error> {
-        let requests::OpenChannelRequest {
-            public_key,
-            ip,
-            port,
-            amount,
-            push_amount,
-        } = open_channel_request;
         match &self {
             Nodemanger::Ldk(ldk) => {
+                let requests::OpenChannelRequest {
+                    public_key,
+                    ip,
+                    port,
+                    amount,
+                    push_amount,
+                } = open_channel_request;
+
                 let peer_ip = Ipv4Addr::from_str(&ip)?;
 
                 let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
@@ -108,7 +113,10 @@ impl Nodemanger {
                 );
                 Ok(StatusCode::OK)
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => {
+                cln.open_chennel(open_channel_request).await?;
+                Ok(StatusCode::OK)
+            }
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -124,7 +132,11 @@ impl Nodemanger {
                     .collect();
                 Ok(channel_info)
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => {
+                let channels = cln.list_channels().await?;
+
+                Ok(channels)
+            }
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -148,7 +160,7 @@ impl Nodemanger {
                     ln,
                 })
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => cln.get_balance().await,
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -164,13 +176,13 @@ impl Nodemanger {
                 let _res = ldk.node.send_payment(&bolt11.bolt11)?;
 
                 let res = responses::PayInvoiceResponse {
-                    paymnet_hash: Sha256::from_str(&p.to_string())?,
+                    payment_hash: Sha256::from_str(&p.to_string())?,
                     status: cashu_crab_invoice(InvoiceStatus::InFlight),
                 };
 
                 Ok(res)
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => cln.pay_invoice(bolt11).await,
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -179,6 +191,8 @@ impl Nodemanger {
         &self,
         keysend_request: requests::KeysendRequest,
     ) -> Result<String, Error> {
+        let amount = Amount::from_sat(keysend_request.amount);
+
         match &self {
             Nodemanger::Ldk(ldk) => {
                 let node_pubkey = ldk_node::bitcoin::secp256k1::PublicKey::from_slice(
@@ -191,7 +205,7 @@ impl Nodemanger {
 
                 Ok(String::from_utf8(res.0.to_vec()).unwrap())
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => cln.pay_keysend(keysend_request.pubkey, amount).await,
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -200,66 +214,59 @@ impl Nodemanger {
         &self,
         create_invoice_request: requests::CreateInvoiceParams,
     ) -> Result<Bolt11, Error> {
-        match &self {
+        let requests::CreateInvoiceParams { msat, description } = create_invoice_request;
+
+        let description = match description {
+            Some(des) => des,
+            None => {
+                // TODO: Get default from config
+                "Hello World".to_string()
+            }
+        };
+
+        let amount = Amount::from_msat(msat);
+
+        let invoice = match &self {
             Nodemanger::Ldk(ldk) => {
-                let requests::CreateInvoiceParams { msat, description } = create_invoice_request;
-
-                let description = match description {
-                    Some(des) => des,
-                    None => {
-                        // TODO: Get default from config
-                        "Hello World".to_string()
-                    }
-                };
-
                 let invoice = ldk
                     .node
                     .receive_payment(msat, &description, SECS_IN_DAY)
                     .unwrap();
 
-                Ok(Bolt11 { bolt11: invoice })
+                invoice
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => cln.create_invoice(amount, description).await?,
             Nodemanger::Greenlight(_gln) => todo!(),
-        }
+        };
+
+        Ok(Bolt11 { bolt11: invoice })
     }
 
     pub async fn send_to_onchain_address(
         &self,
         create_invoice_request: requests::PayOnChainRequest,
     ) -> Result<String, Error> {
-        match &self {
+        let amount = Amount::from_sat(create_invoice_request.sat);
+        let txid = match &self {
             Nodemanger::Ldk(ldk) => {
-                let address = Address::from_str(&create_invoice_request.address).unwrap();
+                let address =
+                    gl_client::bitcoin::Address::from_str(&create_invoice_request.address).unwrap();
                 let res = ldk
                     .node
                     .send_to_onchain_address(&address, create_invoice_request.sat)?;
 
-                Ok(res.to_string())
+                res.to_string()
             }
-            Nodemanger::Cln(_cln) => todo!(),
-            Nodemanger::Greenlight(_gln) => todo!(),
-        }
-    }
-
-    pub async fn close_all(&self) -> Result<(), Error> {
-        match &self {
-            Nodemanger::Ldk(ldk) => {
-                let channels = ldk.node.list_channels();
-                let channels: Vec<(ldk_node::ChannelId, PublicKey)> = channels
-                    .into_iter()
-                    .map(|c| (c.channel_id, c.counterparty_node_id))
-                    .collect();
-
-                for (id, peer) in channels {
-                    ldk.node.close_channel(&id, peer).unwrap();
-                }
-
-                Ok(())
+            Nodemanger::Cln(cln) => {
+                let address = Address::from_str(&create_invoice_request.address)
+                    .unwrap()
+                    .assume_checked();
+                cln.pay_on_chain(address, amount).await?
             }
-            Nodemanger::Cln(_cln) => todo!(),
             Nodemanger::Greenlight(_gln) => todo!(),
-        }
+        };
+
+        Ok(txid)
     }
 
     pub async fn close(&self, close_channel_request: requests::CloseChannel) -> Result<(), Error> {
@@ -280,7 +287,13 @@ impl Nodemanger {
 
                 Ok(())
             }
-            Nodemanger::Cln(_cln) => todo!(),
+            Nodemanger::Cln(cln) => {
+                cln.close(
+                    String::from_utf8(close_channel_request.channel_id)?,
+                    close_channel_request.peer_id,
+                )
+                .await
+            }
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
@@ -363,12 +376,6 @@ async fn post_pay_on_chain(
     let res = state.send_to_onchain_address(payload).await?;
 
     Ok(Json(res))
-}
-
-async fn post_close_all(State(state): State<Nodemanger>) -> Result<StatusCode, Error> {
-    state.close_all().await?;
-
-    Ok(StatusCode::OK)
 }
 
 pub fn channel_info_from_details(details: ChannelDetails) -> ChannelInfo {

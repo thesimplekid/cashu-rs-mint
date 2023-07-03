@@ -4,20 +4,30 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use cashu_crab::lightning_invoice::Invoice;
+use bitcoin::secp256k1::PublicKey;
+use bitcoin::Address;
 use cashu_crab::mint::Mint;
-use cashu_crab::Amount;
-use cashu_crab::Sha256;
+use cashu_crab::{types::InvoiceStatus, Amount, Invoice, Sha256};
+use cln_rpc::model::responses::ListfundsOutputsStatus;
+use cln_rpc::model::responses::ListpeerchannelsChannelsState;
+use cln_rpc::model::responses::PayStatus;
+use cln_rpc::model::ListpeerchannelsChannels;
 use cln_rpc::model::{
-    InvoiceRequest, ListinvoicesRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse,
+    requests::ListpeerchannelsRequest, InvoiceRequest, KeysendRequest, ListinvoicesRequest,
+    NewaddrRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse, WithdrawRequest,
 };
+use cln_rpc::model::{CloseRequest, FundchannelRequest};
+use cln_rpc::primitives::AmountOrAll;
 use cln_rpc::primitives::{Amount as CLN_Amount, AmountOrAny};
 use futures::{Stream, StreamExt};
 use log::{debug, warn};
+use node_manager_types::responses::BalanceResponse;
+use node_manager_types::Bolt11;
+use node_manager_types::{requests, responses};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
+use super::{Error, InvoiceInfo, LnProcessor};
 
 use crate::database::Db;
 use crate::utils::unix_time;
@@ -25,17 +35,22 @@ use crate::utils::unix_time;
 #[derive(Clone)]
 pub struct Cln {
     rpc_socket: PathBuf,
+    cln_client: Arc<Mutex<cln_rpc::ClnRpc>>,
     db: Db,
     _mint: Arc<Mutex<Mint>>,
 }
 
 impl Cln {
-    pub async fn new(rpc_socket: PathBuf, db: Db, mint: Arc<Mutex<Mint>>) -> Self {
-        Self {
+    pub async fn new(rpc_socket: PathBuf, db: Db, mint: Arc<Mutex<Mint>>) -> Result<Self, Error> {
+        let cln_client = cln_rpc::ClnRpc::new(&rpc_socket).await?;
+        let cln_client = Arc::new(Mutex::new(cln_client));
+
+        Ok(Self {
             rpc_socket,
             db,
             _mint: mint,
-        }
+            cln_client,
+        })
     }
 }
 
@@ -98,7 +113,7 @@ impl LnProcessor for Cln {
                 .get_invoice_info_by_payment_hash(&payment_hash)
                 .await?;
 
-            invoice_info.status = InvoiceStatus::Paid;
+            invoice_info.status = super::InvoiceStatus::Paid;
             invoice_info.confirmed_at = Some(unix_time());
 
             self.db.add_invoice(&invoice_info).await?;
@@ -107,7 +122,10 @@ impl LnProcessor for Cln {
         Ok(())
     }
 
-    async fn check_invoice_status(&self, payment_hash: &Sha256) -> Result<InvoiceStatus, Error> {
+    async fn check_invoice_status(
+        &self,
+        payment_hash: &Sha256,
+    ) -> Result<super::InvoiceStatus, Error> {
         let mut cln_client = cln_rpc::ClnRpc::new(&self.rpc_socket).await?;
 
         let cln_response = cln_client
@@ -229,4 +247,359 @@ pub fn fee_reserve(invoice_amount: Amount) -> Amount {
     let fee_reserse = (u64::from(invoice_amount) as f64 * 0.01) as u64;
 
     Amount::from(fee_reserse)
+}
+
+impl Cln {
+    pub async fn new_onchain_address(&self) -> Result<Address, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::NewAddr(NewaddrRequest {
+                addresstype: None,
+            }))
+            .await?;
+
+        let address: Address = match cln_response {
+            cln_rpc::Response::NewAddr(addr_res) => Address::from_str(&addr_res.bech32.unwrap())
+                .unwrap()
+                .assume_checked(),
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(address)
+    }
+
+    pub async fn open_chennel(
+        &self,
+        open_channel_request: requests::OpenChannelRequest,
+    ) -> Result<String, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::FundChannel(
+                from_open_request_to_fund_request(open_channel_request),
+            ))
+            .await?;
+
+        let channel_id = match cln_response {
+            cln_rpc::Response::FundChannel(addr_res) => addr_res.channel_id,
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(channel_id)
+    }
+
+    pub async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListPeerChannels(
+                ListpeerchannelsRequest { id: None },
+            ))
+            .await?;
+
+        let channels = match cln_response {
+            cln_rpc::Response::ListPeerChannels(peer_channels) => {
+                let channels;
+                if let Some(peer_channels) = peer_channels.channels {
+                    channels = peer_channels
+                        .into_iter()
+                        .map(|c| from_list_channels_to_info(c))
+                        .collect();
+                } else {
+                    channels = vec![];
+                }
+                channels
+            }
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(channels)
+    }
+
+    pub async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListFunds(
+                cln_rpc::model::ListfundsRequest { spent: None },
+            ))
+            .await?;
+
+        let balance = match cln_response {
+            cln_rpc::Response::ListFunds(funds_response) => {
+                let mut on_chain_total = CLN_Amount::from_msat(0);
+                let mut on_chain_spendable = CLN_Amount::from_msat(0);
+                let mut ln = CLN_Amount::from_msat(0);
+
+                for output in funds_response.outputs {
+                    match output.status {
+                        ListfundsOutputsStatus::UNCONFIRMED => {
+                            on_chain_total = on_chain_total + output.amount_msat;
+                        }
+                        ListfundsOutputsStatus::IMMATURE => {
+                            on_chain_total = on_chain_total + output.amount_msat;
+                        }
+                        ListfundsOutputsStatus::CONFIRMED => {
+                            on_chain_total = on_chain_total + output.amount_msat;
+                            on_chain_spendable = on_chain_spendable + output.amount_msat;
+                        }
+                        ListfundsOutputsStatus::SPENT => (),
+                    }
+                }
+
+                for channel in funds_response.channels {
+                    ln = ln + channel.our_amount_msat;
+                }
+
+                BalanceResponse {
+                    on_chain_spendable: Amount::from_msat(on_chain_spendable.msat()),
+                    on_chain_total: Amount::from_msat(on_chain_total.msat()),
+                    ln: Amount::from_msat(ln.msat()),
+                }
+            }
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(balance)
+    }
+
+    pub async fn pay_invoice(
+        &self,
+        bolt11: Bolt11,
+    ) -> Result<responses::PayInvoiceResponse, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::Pay(PayRequest {
+                bolt11: bolt11.bolt11.to_string(),
+                amount_msat: None,
+                label: None,
+                riskfactor: None,
+                maxfeepercent: None,
+                retry_for: None,
+                maxdelay: None,
+                exemptfee: None,
+                localinvreqid: None,
+                exclude: None,
+                maxfee: None,
+                description: None,
+            }))
+            .await?;
+
+        let response = match cln_response {
+            cln_rpc::Response::Pay(pay_response) => {
+                let status = match pay_response.status {
+                    PayStatus::COMPLETE => InvoiceStatus::Paid,
+                    PayStatus::PENDING => InvoiceStatus::InFlight,
+                    PayStatus::FAILED => InvoiceStatus::Unpaid,
+                };
+                responses::PayInvoiceResponse {
+                    payment_hash: Sha256::from_str(&pay_response.payment_hash.to_string())?,
+                    status,
+                }
+            }
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(response)
+    }
+
+    pub async fn create_invoice(
+        &self,
+        amount: Amount,
+        description: String,
+    ) -> Result<Invoice, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+
+        let amount_msat = AmountOrAny::Amount(CLN_Amount::from_msat(amount.to_msat()));
+        let cln_response = cln_client
+            .call(cln_rpc::Request::Invoice(InvoiceRequest {
+                amount_msat,
+                description,
+                label: Uuid::new_v4().to_string(),
+                expiry: Some(3600),
+                fallbacks: None,
+                preimage: None,
+                cltv: None,
+                deschashonly: None,
+            }))
+            .await?;
+
+        let invoice = match cln_response {
+            cln_rpc::Response::Invoice(invoice_res) => {
+                let invoice = Invoice::from_str(&invoice_res.bolt11)?;
+                invoice
+            }
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(invoice)
+    }
+
+    pub async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let satoshi = Some(AmountOrAll::Amount(CLN_Amount::from_sat(amount.to_sat())));
+
+        let cln_response = cln_client
+            .call(cln_rpc::Request::Withdraw(WithdrawRequest {
+                destination: address.to_string(),
+                satoshi,
+                feerate: None,
+                minconf: None,
+                utxos: None,
+            }))
+            .await?;
+
+        let txid = match cln_response {
+            cln_rpc::Response::Withdraw(withdraw_response) => withdraw_response.txid,
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(txid)
+    }
+
+    pub async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error> {
+        let mut cln_client = self.cln_client.lock().await;
+
+        let destination = peer_id.map(|x| x.to_string());
+
+        let cln_response = cln_client
+            .call(cln_rpc::Request::Close(CloseRequest {
+                id: channel_id,
+                unilateraltimeout: None,
+                destination,
+                fee_negotiation_step: None,
+                wrong_funding: None,
+                force_lease_closed: None,
+                feerange: None,
+            }))
+            .await?;
+
+        let _txid = match cln_response {
+            cln_rpc::Response::Close(close_res) => close_res.txid,
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(())
+    }
+
+    pub async fn pay_keysend(
+        &self,
+        destination: PublicKey,
+        amount: Amount,
+    ) -> Result<String, Error> {
+        let destination =
+            cln_rpc::primitives::PublicKey::from_slice(&destination.serialize()).unwrap();
+
+        let amount_msat = CLN_Amount::from_msat(amount.to_msat());
+
+        let mut cln_client = self.cln_client.lock().await;
+
+        let cln_response = cln_client
+            .call(cln_rpc::Request::KeySend(KeysendRequest {
+                destination,
+                amount_msat,
+                label: None,
+                maxfeepercent: None,
+                retry_for: None,
+                maxdelay: None,
+                exemptfee: None,
+                routehints: None,
+                extratlvs: None,
+            }))
+            .await?;
+
+        let payment_hash = match cln_response {
+            cln_rpc::Response::KeySend(keysend_res) => keysend_res.payment_hash,
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(payment_hash.to_string())
+    }
+}
+
+fn from_open_request_to_fund_request(
+    open_channel_request: requests::OpenChannelRequest,
+) -> FundchannelRequest {
+    let requests::OpenChannelRequest {
+        public_key,
+        ip: _,
+        port: _,
+        amount,
+        push_amount,
+    } = open_channel_request;
+
+    let push_amount = push_amount.map(|a| cln_rpc::primitives::Amount::from_sat(a.to_sat()));
+
+    let amount = AmountOrAll::Amount(cln_rpc::primitives::Amount::from_sat(amount.to_sat()));
+
+    let public_key = cln_rpc::primitives::PublicKey::from_slice(&public_key.serialize()).unwrap();
+
+    FundchannelRequest {
+        id: public_key,
+        amount,
+        feerate: None,
+        announce: None,
+        minconf: None,
+        push_msat: push_amount,
+        close_to: None,
+        request_amt: None,
+        compact_lease: None,
+        utxos: None,
+        mindepth: None,
+        reserve: None,
+    }
+}
+
+fn from_list_channels_to_info(list_channel: ListpeerchannelsChannels) -> responses::ChannelInfo {
+    let remote_balance = list_channel.funding.as_ref().map_or(Amount::ZERO, |a| {
+        Amount::from_msat(
+            a.remote_funds_msat
+                .unwrap_or(CLN_Amount::from_msat(0))
+                .msat(),
+        )
+    });
+    let local_balance = list_channel.funding.map_or(Amount::ZERO, |a| {
+        Amount::from_msat(
+            a.local_funds_msat
+                .unwrap_or(CLN_Amount::from_msat(0))
+                .msat(),
+        )
+    });
+
+    let is_usable = list_channel
+        .state
+        .map(|s| matches!(s, ListpeerchannelsChannelsState::CHANNELD_NORMAL))
+        .unwrap_or(false);
+
+    responses::ChannelInfo {
+        peer_pubkey: PublicKey::from_slice(&list_channel.peer_id.unwrap().serialize()).unwrap(),
+        channel_id: list_channel.channel_id.unwrap().to_vec(),
+        balance: local_balance,
+        value: local_balance + remote_balance,
+        is_usable,
+    }
 }

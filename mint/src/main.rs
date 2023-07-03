@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ln = match settings.ln.ln_backend {
         LnBackend::Cln => {
-            let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await);
+            let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await?);
             Ln {
                 ln_processor: cln.clone(),
                 node_manager: ln::node_manager::Nodemanger::Cln(cln),

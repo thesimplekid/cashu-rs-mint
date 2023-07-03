@@ -48,7 +48,7 @@ pub mod responses {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PayInvoiceResponse {
-        pub paymnet_hash: Sha256,
+        pub payment_hash: Sha256,
         pub status: InvoiceStatus,
     }
 
