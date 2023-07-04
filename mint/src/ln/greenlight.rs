@@ -3,31 +3,35 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bip39::{Language, Mnemonic};
+use bitcoin::secp256k1::PublicKey;
+use bitcoin::Address;
 use cashu_crab::lightning_invoice::Invoice;
 use cashu_crab::mint::Mint;
+use cashu_crab::types::InvoiceStatus as CrabInvoiceStatus;
 use cashu_crab::Amount;
 use cashu_crab::Sha256;
 use futures::{Stream, StreamExt};
 use gl_client::bitcoin::Network;
 use gl_client::node::ClnClient;
 use gl_client::pb::cln;
-use gl_client::pb::cln::Amount as Cln_Amount;
-use gl_client::pb::cln::{
-    AmountOrAny, ListinvoicesRequest, ListinvoicesResponse, PayRequest, PayResponse,
-    WaitanyinvoiceRequest, WaitanyinvoiceResponse,
-};
+use gl_client::pb::cln::listfunds_outputs::ListfundsOutputsStatus;
+use gl_client::pb::cln::pay_response::PayStatus;
 use gl_client::scheduler::Scheduler;
-use gl_client::signer::model::cln::amount_or_any::Value;
+use gl_client::signer::model::cln::amount_or_any::Value as SignerValue;
+use gl_client::signer::model::cln::Amount as SignerAmount;
+use gl_client::signer::model::cln::ListpeerchannelsRequest;
 use gl_client::signer::model::greenlight::cln::InvoiceResponse;
 use gl_client::signer::Signer;
 use gl_client::tls::TlsConfig;
 use log::debug;
+use node_manager_types::{requests, responses, Bolt11};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::database::Db;
 use crate::utils::unix_time;
 
+use super::LnNodeManager;
 use super::{Error, InvoiceInfo, InvoiceStatus, LnProcessor};
 
 #[derive(Clone)]
@@ -112,8 +116,8 @@ impl LnProcessor for Greenlight {
 
         let cln_response = cln_client
             .invoice(cln::InvoiceRequest {
-                amount_msat: Some(AmountOrAny {
-                    value: Some(Value::Amount(Cln_Amount {
+                amount_msat: Some(cln::AmountOrAny {
+                    value: Some(SignerValue::Amount(cln::Amount {
                         msat: u64::from(amount) * 1000,
                     })),
                 }),
@@ -174,8 +178,6 @@ impl LnProcessor for Greenlight {
             invoice_info.status = InvoiceStatus::Paid;
             invoice_info.confirmed_at = Some(unix_time());
 
-            let mut mint = self.mint.lock().await;
-
             self.db.add_invoice(&invoice_info).await?;
         }
 
@@ -186,14 +188,14 @@ impl LnProcessor for Greenlight {
         let mut cln_client = self.node.lock().await;
 
         let cln_response = cln_client
-            .list_invoices(ListinvoicesRequest {
+            .list_invoices(cln::ListinvoicesRequest {
                 payment_hash: Some(payment_hash.to_string().as_bytes().to_vec()),
                 ..Default::default()
             })
             .await
             .map_err(|_| Error::Custom("Tonic Error".to_string()))?;
 
-        let ListinvoicesResponse { invoices, .. } = cln_response.into_inner();
+        let cln::ListinvoicesResponse { invoices, .. } = cln_response.into_inner();
 
         let status = {
             debug!("{:?}", invoices);
@@ -211,8 +213,6 @@ impl LnProcessor for Greenlight {
 
         self.db.add_invoice(&invoice).await?;
 
-        let mut mint = self.mint.lock().await;
-
         Ok(status)
     }
 
@@ -223,12 +223,12 @@ impl LnProcessor for Greenlight {
     ) -> Result<(String, Amount), Error> {
         let mut cln_client = self.node.lock().await;
 
-        let maxfee = max_fee.map(|amount| Cln_Amount {
+        let maxfee = max_fee.map(|amount| cln::Amount {
             msat: amount.to_msat(),
         });
 
         let cln_response = cln_client
-            .pay(PayRequest {
+            .pay(cln::PayRequest {
                 bolt11: invoice.to_string(),
                 maxfee,
                 ..Default::default()
@@ -236,7 +236,7 @@ impl LnProcessor for Greenlight {
             .await
             .map_err(|_| Error::Custom("Tonic Error".to_string()))?;
 
-        let PayResponse {
+        let cln::PayResponse {
             payment_preimage,
             amount_sent_msat,
             ..
@@ -253,7 +253,7 @@ impl LnProcessor for Greenlight {
 async fn invoice_stream(
     cln_client: Arc<Mutex<ClnClient>>,
     last_pay_index: Option<u64>,
-) -> Result<impl Stream<Item = WaitanyinvoiceResponse>, Error> {
+) -> Result<impl Stream<Item = cln::WaitanyinvoiceResponse>, Error> {
     let cln_client = cln_client.lock().await.clone();
     Ok(futures::stream::unfold(
         (cln_client, last_pay_index),
@@ -262,13 +262,13 @@ async fn invoice_stream(
             loop {
                 // info!("Waiting for index: {last_pay_idx:?}");
                 let invoice_res = cln_client
-                    .wait_any_invoice(WaitanyinvoiceRequest {
+                    .wait_any_invoice(cln::WaitanyinvoiceRequest {
                         lastpay_index: last_pay_idx,
                         timeout: None,
                     })
                     .await;
 
-                let invoice: WaitanyinvoiceResponse = invoice_res.unwrap().into_inner();
+                let invoice: cln::WaitanyinvoiceResponse = invoice_res.unwrap().into_inner();
 
                 last_pay_idx = invoice.pay_index;
 
@@ -279,8 +279,275 @@ async fn invoice_stream(
     .boxed())
 }
 
-pub fn fee_reserve(invoice_amount: Amount) -> Amount {
-    let fee_reserse = (u64::from(invoice_amount) as f64 * 0.01) as u64;
+#[async_trait]
+impl LnNodeManager for Greenlight {
+    async fn new_onchain_address(&self) -> Result<Address, Error> {
+        let mut node = self.node.lock().await;
 
-    Amount::from(fee_reserse)
+        let new_addr = node
+            .new_addr(cln::NewaddrRequest { addresstype: None })
+            .await
+            .unwrap();
+
+        let address = match new_addr.into_inner().bech32 {
+            Some(addr) => addr,
+            None => return Err(Error::Custom("Could not get addres".to_string())),
+        };
+
+        let address = Address::from_str(&address).unwrap().assume_checked();
+
+        Ok(address)
+    }
+
+    async fn open_channel(
+        &self,
+        open_channel_request: requests::OpenChannelRequest,
+    ) -> Result<String, Error> {
+        let mut node = self.node.lock().await;
+
+        let requests::OpenChannelRequest {
+            public_key,
+            ip: _,
+            port: _,
+            amount,
+            push_amount,
+        } = open_channel_request;
+
+        let amount = cln::AmountOrAll {
+            value: Some(cln::amount_or_all::Value::Amount(SignerAmount {
+                msat: amount.to_msat(),
+            })),
+        };
+
+        let push_msat = push_amount.map(|pa| SignerAmount { msat: pa.to_msat() });
+
+        let request = cln::FundchannelRequest {
+            id: public_key.serialize().to_vec(),
+            amount: Some(amount),
+            push_msat,
+            ..Default::default()
+        };
+
+        let response = node.fund_channel(request).await.unwrap();
+
+        let txid = response.into_inner().txid;
+
+        Ok(String::from_utf8(txid)?)
+    }
+
+    async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
+        let mut node = self.node.lock().await;
+
+        let channels_response = node
+            .list_peer_channels(ListpeerchannelsRequest { id: None })
+            .await
+            .unwrap()
+            .into_inner();
+
+        let channels = channels_response
+            .channels
+            .into_iter()
+            .map(|c| from_list_channels_to_info(c))
+            .collect();
+
+        Ok(channels)
+    }
+
+    async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
+        let mut node = self.node.lock().await;
+
+        let response = node
+            .list_funds(cln::ListfundsRequest { spent: None })
+            .await
+            .unwrap()
+            .into_inner();
+
+        let mut on_chain_total = Amount::default();
+
+        let mut on_chain_spendable = Amount::ZERO;
+        let mut ln = Amount::ZERO;
+
+        for output in response.outputs {
+            match &output.status() {
+                ListfundsOutputsStatus::Unconfirmed => {
+                    on_chain_total = on_chain_total
+                        + Amount::from_msat(
+                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                        );
+                }
+                ListfundsOutputsStatus::Immature => {
+                    on_chain_total = on_chain_total
+                        + Amount::from_msat(
+                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                        );
+                }
+                ListfundsOutputsStatus::Confirmed => {
+                    on_chain_total = on_chain_total
+                        + Amount::from_msat(
+                            output
+                                .amount_msat
+                                .clone()
+                                .unwrap_or(cln::Amount::default())
+                                .msat,
+                        );
+                    on_chain_spendable = on_chain_spendable
+                        + Amount::from_msat(
+                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                        );
+                }
+                ListfundsOutputsStatus::Spent => (),
+            }
+        }
+
+        for channel in response.channels {
+            ln = ln
+                + Amount::from_msat(
+                    channel
+                        .our_amount_msat
+                        .unwrap_or(cln::Amount::default())
+                        .msat,
+                );
+        }
+
+        Ok(responses::BalanceResponse {
+            on_chain_spendable,
+            on_chain_total,
+            ln,
+        })
+    }
+
+    async fn pay_invoice(&self, bolt11: Bolt11) -> Result<responses::PayInvoiceResponse, Error> {
+        let mut node = self.node.lock().await;
+        let pay_request = cln::PayRequest {
+            bolt11: bolt11.bolt11.to_string(),
+            ..Default::default()
+        };
+
+        let response = node.pay(pay_request).await.unwrap().into_inner();
+
+        let status = match response.status() {
+            PayStatus::Complete => CrabInvoiceStatus::Paid,
+            PayStatus::Pending => CrabInvoiceStatus::InFlight,
+            PayStatus::Failed => CrabInvoiceStatus::Expired,
+        };
+
+        Ok(responses::PayInvoiceResponse {
+            payment_hash: Sha256::from_str(&String::from_utf8(response.payment_hash)?)?,
+            status,
+        })
+    }
+
+    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
+        let mut node = self.node.lock().await;
+
+        let amount_msat = cln::AmountOrAny {
+            value: Some(cln::amount_or_any::Value::Amount(SignerAmount {
+                msat: amount.to_msat(),
+            })),
+        };
+
+        let response = node
+            .invoice(cln::InvoiceRequest {
+                amount_msat: Some(amount_msat),
+                description,
+                label: Uuid::new_v4().to_string(),
+                expiry: Some(3600),
+                fallbacks: vec![],
+                preimage: None,
+                cltv: None,
+                deschashonly: None,
+            })
+            .await
+            .unwrap()
+            .into_inner();
+        let bolt11 = response.bolt11;
+
+        Ok(Invoice::from_str(&bolt11)?)
+    }
+
+    async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {
+        let mut node = self.node.lock().await;
+
+        let satoshi = Some(cln::AmountOrAll {
+            value: Some(cln::amount_or_all::Value::Amount(cln::Amount {
+                msat: amount.to_msat(),
+            })),
+        });
+
+        let response = node
+            .withdraw(cln::WithdrawRequest {
+                destination: address.to_string(),
+                satoshi,
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner();
+
+        Ok(String::from_utf8(response.txid)?)
+    }
+
+    async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error> {
+        let mut node = self.node.lock().await;
+
+        let destination = peer_id.map(|x| x.to_string());
+        let _response = node
+            .close(cln::CloseRequest {
+                id: channel_id,
+                destination,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        Ok(())
+    }
+
+    async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error> {
+        let mut node = self.node.lock().await;
+        let amount_msat = SignerAmount {
+            msat: amount.to_msat(),
+        };
+        let response = node
+            .key_send(cln::KeysendRequest {
+                destination: destination.serialize().to_vec(),
+                amount_msat: Some(amount_msat),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner();
+
+        Ok(String::from_utf8(response.payment_hash)?)
+    }
+}
+
+fn from_list_channels_to_info(
+    list_channel: cln::ListpeerchannelsChannels,
+) -> responses::ChannelInfo {
+    let remote_balance = list_channel.funding.as_ref().map_or(Amount::ZERO, |a| {
+        Amount::from_msat(
+            a.remote_funds_msat
+                .clone()
+                .unwrap_or(SignerAmount { msat: 0 })
+                .msat,
+        )
+    });
+
+    let local_balance = list_channel.funding.map_or(Amount::ZERO, |a| {
+        Amount::from_msat(a.local_funds_msat.unwrap_or(SignerAmount { msat: 0 }).msat)
+    });
+
+    let is_usable = list_channel
+        .state
+        // FIXME: Not sure what number is active
+        .map(|s| matches!(s, 0))
+        .unwrap_or(false);
+
+    responses::ChannelInfo {
+        peer_pubkey: PublicKey::from_slice(&list_channel.peer_id.unwrap()).unwrap(),
+        channel_id: list_channel.channel_id.unwrap().to_vec(),
+        balance: local_balance,
+        value: local_balance + remote_balance,
+        is_usable,
+    }
 }
