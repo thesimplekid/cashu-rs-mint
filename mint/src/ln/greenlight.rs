@@ -44,44 +44,37 @@ pub struct Greenlight {
 }
 
 impl Greenlight {
-    pub async fn new(db: Db, mint: Arc<Mutex<Mint>>) -> Self {
+    pub async fn new(db: Db, mint: Arc<Mutex<Mint>>) -> Result<Self, Error> {
         let mut rng = rand::thread_rng();
-        let m = Mnemonic::generate_in_with(&mut rng, Language::English, 24).unwrap();
+        let m = Mnemonic::generate_in_with(&mut rng, Language::English, 24)?;
         let phrase = m.word_iter().fold("".to_string(), |c, n| c + " " + n);
 
         // Prompt user to safely store the phrase
 
         let seed = m.to_seed("");
 
-        let tls = TlsConfig::new().unwrap();
+        let tls = TlsConfig::new()?;
 
         let secret = seed[0..32].to_vec();
 
-        let signer = Signer::new(secret.clone(), Network::Bitcoin, tls).unwrap();
+        let signer = Signer::new(secret.clone(), Network::Bitcoin, tls)?;
 
-        let scheduler = Scheduler::new(signer.node_id(), Network::Bitcoin)
-            .await
-            .unwrap();
+        let scheduler = Scheduler::new(signer.node_id(), Network::Bitcoin).await?;
 
         // Passing in the signer is required because the client needs to prove
         // ownership of the `node_id`
-        let res = scheduler
-            .register(&signer, Some("".to_string()))
-            .await
-            .unwrap();
+        let res = scheduler.register(&signer, Some("".to_string())).await?;
 
-        let tls = TlsConfig::new().unwrap().identity(
+        let tls = TlsConfig::new()?.identity(
             res.device_cert.as_bytes().to_vec(),
             res.device_key.as_bytes().to_vec(),
         );
 
         // Use the configured `tls` instance when creating `Scheduler` and `Signer`
         // instance going forward
-        let signer = Signer::new(secret, Network::Bitcoin, tls.clone()).unwrap();
+        let signer = Signer::new(secret, Network::Bitcoin, tls.clone())?;
         let scheduler =
-            Scheduler::with(signer.node_id(), Network::Bitcoin, "uri".to_string(), &tls)
-                .await
-                .unwrap();
+            Scheduler::with(signer.node_id(), Network::Bitcoin, "uri".to_string(), &tls).await?;
         let (tx, rx) = tokio::sync::mpsc::channel(1);
 
         let signer_clone = signer.clone();
@@ -91,16 +84,16 @@ impl Greenlight {
             }
         });
 
-        let node: gl_client::node::ClnClient = scheduler.schedule(tls).await.unwrap();
+        let node: gl_client::node::ClnClient = scheduler.schedule(tls).await?;
         let node = Arc::new(Mutex::new(node));
 
-        Self {
+        Ok(Self {
             signer,
             signer_tx: tx,
             node,
             db,
             mint,
-        }
+        })
     }
 }
 
@@ -287,14 +280,14 @@ impl LnNodeManager for Greenlight {
         let new_addr = node
             .new_addr(cln::NewaddrRequest { addresstype: None })
             .await
-            .unwrap();
+            .map_err(|err| Error::TonicError(err.to_string()))?;
 
         let address = match new_addr.into_inner().bech32 {
             Some(addr) => addr,
             None => return Err(Error::Custom("Could not get address".to_string())),
         };
 
-        let address = Address::from_str(&address).unwrap().assume_checked();
+        let address = Address::from_str(&address)?.assume_checked();
 
         Ok(address)
     }
@@ -328,7 +321,10 @@ impl LnNodeManager for Greenlight {
             ..Default::default()
         };
 
-        let response = node.fund_channel(request).await.unwrap();
+        let response = node
+            .fund_channel(request)
+            .await
+            .map_err(|err| Error::TonicError(err.to_string()))?;
 
         let txid = response.into_inner().txid;
 
@@ -341,13 +337,13 @@ impl LnNodeManager for Greenlight {
         let channels_response = node
             .list_peer_channels(ListpeerchannelsRequest { id: None })
             .await
-            .unwrap()
+            .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
 
         let channels = channels_response
             .channels
             .into_iter()
-            .map(from_list_channels_to_info)
+            .flat_map(from_list_channels_to_info)
             .collect();
 
         Ok(channels)
@@ -359,7 +355,7 @@ impl LnNodeManager for Greenlight {
         let response = node
             .list_funds(cln::ListfundsRequest { spent: None })
             .await
-            .unwrap()
+            .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
 
         let mut on_chain_total = Amount::default();
@@ -418,7 +414,11 @@ impl LnNodeManager for Greenlight {
             ..Default::default()
         };
 
-        let response = node.pay(pay_request).await.unwrap().into_inner();
+        let response = node
+            .pay(pay_request)
+            .await
+            .map_err(|err| Error::TonicError(err.to_string()))?
+            .into_inner();
 
         let status = match response.status() {
             PayStatus::Complete => CrabInvoiceStatus::Paid,
@@ -453,7 +453,7 @@ impl LnNodeManager for Greenlight {
                 deschashonly: None,
             })
             .await
-            .unwrap()
+            .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
         let bolt11 = response.bolt11;
 
@@ -476,7 +476,7 @@ impl LnNodeManager for Greenlight {
                 ..Default::default()
             })
             .await
-            .unwrap()
+            .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
 
         Ok(String::from_utf8(response.txid)?)
@@ -493,7 +493,7 @@ impl LnNodeManager for Greenlight {
                 ..Default::default()
             })
             .await
-            .unwrap();
+            .map_err(|err| Error::TonicError(err.to_string()))?;
         Ok(())
     }
 
@@ -509,7 +509,7 @@ impl LnNodeManager for Greenlight {
                 ..Default::default()
             })
             .await
-            .unwrap()
+            .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
 
         Ok(String::from_utf8(response.payment_hash)?)
@@ -518,7 +518,7 @@ impl LnNodeManager for Greenlight {
 
 fn from_list_channels_to_info(
     list_channel: cln::ListpeerchannelsChannels,
-) -> responses::ChannelInfo {
+) -> Result<responses::ChannelInfo, Error> {
     let remote_balance = list_channel.funding.as_ref().map_or(Amount::ZERO, |a| {
         Amount::from_msat(
             a.remote_funds_msat
@@ -538,11 +538,18 @@ fn from_list_channels_to_info(
         .map(|s| matches!(s, 0))
         .unwrap_or(false);
 
-    responses::ChannelInfo {
-        peer_pubkey: PublicKey::from_slice(&list_channel.peer_id.unwrap()).unwrap(),
-        channel_id: list_channel.channel_id.unwrap().to_vec(),
+    Ok(responses::ChannelInfo {
+        peer_pubkey: PublicKey::from_slice(
+            &list_channel
+                .peer_id
+                .ok_or(Error::Custom("No peer id".to_string()))?,
+        )?,
+        channel_id: list_channel
+            .channel_id
+            .ok_or(Error::Custom("No Channel Id".to_string()))?
+            .to_vec(),
         balance: local_balance,
         value: local_balance + remote_balance,
         is_usable,
-    }
+    })
 }

@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         LnBackend::Greenlight => {
-            let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await);
+            let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await?);
             Ln {
                 ln_processor: gln.clone(),
                 node_manager: ln::node_manager::Nodemanger::Greenlight(gln),

@@ -11,6 +11,7 @@ pub enum Error {
     Serde(serde_json::Error),
     WrongClnResponse,
     Custom(String),
+    TonicError(String),
 }
 
 impl std::error::Error for Error {}
@@ -22,6 +23,7 @@ impl fmt::Display for Error {
             Self::Serde(code) => write!(f, "{}", code),
             Self::WrongClnResponse => write!(f, "Cln returned the wrong response"),
             Self::Custom(code) => write!(f, "{}", code),
+            Self::TonicError(code) => write!(f, "{}", code),
         }
     }
 }
@@ -80,6 +82,30 @@ impl From<std::net::AddrParseError> for Error {
     }
 }
 
+impl From<bitcoin::address::Error> for Error {
+    fn from(err: bitcoin::address::Error) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
+impl From<gl_client::bitcoin::secp256k1::Error> for Error {
+    fn from(err: gl_client::bitcoin::secp256k1::Error) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
+impl From<bitcoin::secp256k1::Error> for Error {
+    fn from(err: bitcoin::secp256k1::Error) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
+impl From<bip39::Error> for Error {
+    fn from(err: bip39::Error) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     code: u16,
@@ -107,7 +133,10 @@ impl IntoResponse for Error {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
             }
             Self::WrongClnResponse => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
+            // REVIEW: Most of these error codes shouldnt be returned on response
+            // Keeping it for now to make debugging easier
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
+            Self::TonicError(code) => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
         }
     }
 }

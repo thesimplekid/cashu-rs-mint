@@ -260,9 +260,12 @@ impl LnNodeManager for Cln {
             .await?;
 
         let address: Address = match cln_response {
-            cln_rpc::Response::NewAddr(addr_res) => Address::from_str(&addr_res.bech32.unwrap())
-                .unwrap()
-                .assume_checked(),
+            cln_rpc::Response::NewAddr(addr_res) => Address::from_str(
+                &addr_res
+                    .bech32
+                    .ok_or(Error::Custom("No bech32".to_string()))?,
+            )?
+            .assume_checked(),
             _ => {
                 warn!("CLN returned wrong response kind");
                 return Err(Error::WrongClnResponse);
@@ -279,7 +282,7 @@ impl LnNodeManager for Cln {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::FundChannel(
-                from_open_request_to_fund_request(open_channel_request),
+                from_open_request_to_fund_request(open_channel_request)?,
             ))
             .await?;
 
@@ -308,7 +311,7 @@ impl LnNodeManager for Cln {
                 if let Some(peer_channels) = peer_channels.channels {
                     channels = peer_channels
                         .into_iter()
-                        .map(from_list_channels_to_info)
+                        .flat_map(from_list_channels_to_info)
                         .collect();
                 } else {
                     channels = vec![];
@@ -495,8 +498,7 @@ impl LnNodeManager for Cln {
     }
 
     async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error> {
-        let destination =
-            cln_rpc::primitives::PublicKey::from_slice(&destination.serialize()).unwrap();
+        let destination = cln_rpc::primitives::PublicKey::from_slice(&destination.serialize())?;
 
         let amount_msat = CLN_Amount::from_msat(amount.to_msat());
 
@@ -530,7 +532,7 @@ impl LnNodeManager for Cln {
 
 fn from_open_request_to_fund_request(
     open_channel_request: requests::OpenChannelRequest,
-) -> FundchannelRequest {
+) -> Result<FundchannelRequest, Error> {
     let requests::OpenChannelRequest {
         public_key,
         ip: _,
@@ -543,9 +545,9 @@ fn from_open_request_to_fund_request(
 
     let amount = AmountOrAll::Amount(cln_rpc::primitives::Amount::from_sat(amount.to_sat()));
 
-    let public_key = cln_rpc::primitives::PublicKey::from_slice(&public_key.serialize()).unwrap();
+    let public_key = cln_rpc::primitives::PublicKey::from_slice(&public_key.serialize())?;
 
-    FundchannelRequest {
+    Ok(FundchannelRequest {
         id: public_key,
         amount,
         feerate: None,
@@ -558,10 +560,12 @@ fn from_open_request_to_fund_request(
         utxos: None,
         mindepth: None,
         reserve: None,
-    }
+    })
 }
 
-fn from_list_channels_to_info(list_channel: ListpeerchannelsChannels) -> responses::ChannelInfo {
+fn from_list_channels_to_info(
+    list_channel: ListpeerchannelsChannels,
+) -> Result<responses::ChannelInfo, Error> {
     let remote_balance = list_channel.funding.as_ref().map_or(Amount::ZERO, |a| {
         Amount::from_msat(
             a.remote_funds_msat
@@ -582,11 +586,19 @@ fn from_list_channels_to_info(list_channel: ListpeerchannelsChannels) -> respons
         .map(|s| matches!(s, ListpeerchannelsChannelsState::CHANNELD_NORMAL))
         .unwrap_or(false);
 
-    responses::ChannelInfo {
-        peer_pubkey: PublicKey::from_slice(&list_channel.peer_id.unwrap().serialize()).unwrap(),
-        channel_id: list_channel.channel_id.unwrap().to_vec(),
+    Ok(responses::ChannelInfo {
+        peer_pubkey: PublicKey::from_slice(
+            &list_channel
+                .peer_id
+                .ok_or(Error::Custom("No Peer Id".to_string()))?
+                .serialize(),
+        )?,
+        channel_id: list_channel
+            .channel_id
+            .ok_or(Error::Custom("No Channel Id".to_string()))?
+            .to_vec(),
         balance: local_balance,
         value: local_balance + remote_balance,
         is_usable,
-    }
+    })
 }
