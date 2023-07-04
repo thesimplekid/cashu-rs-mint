@@ -291,7 +291,7 @@ impl LnNodeManager for Greenlight {
 
         let address = match new_addr.into_inner().bech32 {
             Some(addr) => addr,
-            None => return Err(Error::Custom("Could not get addres".to_string())),
+            None => return Err(Error::Custom("Could not get address".to_string())),
         };
 
         let address = Address::from_str(&address).unwrap().assume_checked();
@@ -347,7 +347,7 @@ impl LnNodeManager for Greenlight {
         let channels = channels_response
             .channels
             .into_iter()
-            .map(|c| from_list_channels_to_info(c))
+            .map(from_list_channels_to_info)
             .collect();
 
         Ok(channels)
@@ -370,43 +370,38 @@ impl LnNodeManager for Greenlight {
         for output in response.outputs {
             match &output.status() {
                 ListfundsOutputsStatus::Unconfirmed => {
-                    on_chain_total = on_chain_total
-                        + Amount::from_msat(
-                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
-                        );
+                    on_chain_total += Amount::from_msat(
+                        output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                    );
                 }
                 ListfundsOutputsStatus::Immature => {
-                    on_chain_total = on_chain_total
-                        + Amount::from_msat(
-                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
-                        );
+                    on_chain_total += Amount::from_msat(
+                        output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                    );
                 }
                 ListfundsOutputsStatus::Confirmed => {
-                    on_chain_total = on_chain_total
-                        + Amount::from_msat(
-                            output
-                                .amount_msat
-                                .clone()
-                                .unwrap_or(cln::Amount::default())
-                                .msat,
-                        );
-                    on_chain_spendable = on_chain_spendable
-                        + Amount::from_msat(
-                            output.amount_msat.unwrap_or(cln::Amount::default()).msat,
-                        );
+                    on_chain_total += Amount::from_msat(
+                        output
+                            .amount_msat
+                            .clone()
+                            .unwrap_or(cln::Amount::default())
+                            .msat,
+                    );
+                    on_chain_spendable += Amount::from_msat(
+                        output.amount_msat.unwrap_or(cln::Amount::default()).msat,
+                    );
                 }
                 ListfundsOutputsStatus::Spent => (),
             }
         }
 
         for channel in response.channels {
-            ln = ln
-                + Amount::from_msat(
-                    channel
-                        .our_amount_msat
-                        .unwrap_or(cln::Amount::default())
-                        .msat,
-                );
+            ln += Amount::from_msat(
+                channel
+                    .our_amount_msat
+                    .unwrap_or(cln::Amount::default())
+                    .msat,
+            );
         }
 
         Ok(responses::BalanceResponse {

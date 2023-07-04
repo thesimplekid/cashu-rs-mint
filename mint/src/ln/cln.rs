@@ -308,7 +308,7 @@ impl LnNodeManager for Cln {
                 if let Some(peer_channels) = peer_channels.channels {
                     channels = peer_channels
                         .into_iter()
-                        .map(|c| from_list_channels_to_info(c))
+                        .map(from_list_channels_to_info)
                         .collect();
                 } else {
                     channels = vec![];
@@ -431,10 +431,7 @@ impl LnNodeManager for Cln {
             .await?;
 
         let invoice = match cln_response {
-            cln_rpc::Response::Invoice(invoice_res) => {
-                let invoice = Invoice::from_str(&invoice_res.bolt11)?;
-                invoice
-            }
+            cln_rpc::Response::Invoice(invoice_res) => Invoice::from_str(&invoice_res.bolt11)?,
             _ => {
                 warn!("CLN returned wrong response kind");
                 return Err(Error::WrongClnResponse);

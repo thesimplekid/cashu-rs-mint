@@ -199,7 +199,7 @@ impl LnNodeManager for Ldk {
 
         let channel_info = channels_details
             .into_iter()
-            .map(|c| channel_info_from_details(c))
+            .map(channel_info_from_details)
             .collect();
 
         Ok(channel_info)

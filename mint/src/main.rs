@@ -324,7 +324,7 @@ async fn post_mint(
             })?;
             let in_circulation = db.get_in_circulation().await.unwrap() + invoice.amount;
 
-            db.set_in_circulation(&in_circulation);
+            db.set_in_circulation(&in_circulation).await.ok();
 
             mint_res
         }

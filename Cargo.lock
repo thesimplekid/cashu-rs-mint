@@ -166,9 +166,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.69"
+version = "0.1.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b2d0f03b3640e3a630367e40c468cb7f309529c708ed1d88597047b0e7c6ef7"
+checksum = "79fa67157abdfd688a259b6648808757db9347af834624f27ec646da976aee5d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1085,7 +1085,7 @@ checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 [[package]]
 name = "gl-client"
 version = "0.1.9"
-source = "git+ssh://git@github.com/Blockstream/greenlight#110a2956b6bb96fc90221ca1e46ca45fda7798e9"
+source = "git+ssh://git@github.com/Blockstream/greenlight#84140937182e179cdf0f3889d0e511e9fc2060f7"
 dependencies = [
  "anyhow",
  "base64 0.21.2",
