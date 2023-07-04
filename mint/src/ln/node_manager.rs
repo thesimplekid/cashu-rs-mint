@@ -16,6 +16,7 @@ pub use super::error::Error;
 use super::{cln, greenlight, ldk};
 
 use crate::config::Settings;
+use crate::database::Db;
 use crate::ln::LnNodeManager;
 
 #[derive(Clone)]
@@ -25,11 +26,23 @@ pub enum Nodemanger {
     Greenlight(Arc<greenlight::Greenlight>),
 }
 
+#[derive(Clone)]
+struct NodeMangerState {
+    ln: Nodemanger,
+    db: Db,
+}
+
 impl Nodemanger {
-    pub async fn start_server(&self, settings: &Settings) -> Result<(), Error> {
+    pub async fn start_server(&self, settings: &Settings, db: Db) -> Result<(), Error> {
         let manager = self.clone();
+
+        let state = NodeMangerState {
+            ln: self.clone(),
+            db,
+        };
         // TODO: These should be authed
         let node_manager_service = Router::new()
+            // Ln Routes
             .route("/fund", get(get_funding_address))
             .route("/open-channel", post(post_new_open_channel))
             .route("/channels", get(get_list_channels))
@@ -39,8 +52,10 @@ impl Nodemanger {
             .route("/invoice", get(get_create_invoice))
             .route("/pay-on-chain", post(post_pay_on_chain))
             .route("/close", post(post_close_channel))
+            // Mint Routes
+            .route("/circulation", get(in_circulation))
             .layer(CorsLayer::permissive())
-            .with_state(manager);
+            .with_state(state);
 
         let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
 
@@ -202,80 +217,86 @@ impl Nodemanger {
 }
 
 async fn post_close_channel(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Json(payload): Json<requests::CloseChannel>,
 ) -> Result<StatusCode, Error> {
-    state.close(payload).await?;
+    state.ln.close(payload).await?;
 
     Ok(StatusCode::OK)
 }
 
 async fn post_pay_keysend(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Json(payload): Json<requests::KeysendRequest>,
 ) -> Result<Json<String>, Error> {
-    let res = state.pay_keysend(payload).await?;
+    let res = state.ln.pay_keysend(payload).await?;
 
     Ok(Json(res))
 }
 
 async fn post_pay_invoice(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Json(payload): Json<Bolt11>,
 ) -> Result<Json<responses::PayInvoiceResponse>, Error> {
-    let p = state.pay_invoice(payload).await?;
+    let p = state.ln.pay_invoice(payload).await?;
     Ok(Json(p))
 }
 
 async fn get_funding_address(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
 ) -> Result<Json<responses::FundingAddressResponse>, Error> {
-    let on_chain_balance = state.new_onchain_address().await?;
+    let on_chain_balance = state.ln.new_onchain_address().await?;
 
     Ok(Json(on_chain_balance))
 }
 
 async fn post_new_open_channel(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Json(payload): Json<requests::OpenChannelRequest>,
 ) -> Result<StatusCode, Error> {
     // TODO: Check if node has sufficient onchain balance
 
-    if let Err(err) = state.connect_open_channel(payload).await {
+    if let Err(err) = state.ln.connect_open_channel(payload).await {
         warn!("{:?}", err);
     };
     Ok(StatusCode::OK)
 }
 
 async fn get_list_channels(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
 ) -> Result<Json<Vec<responses::ChannelInfo>>, Error> {
-    let channel_info = state.list_channels().await?;
+    let channel_info = state.ln.list_channels().await?;
 
     Ok(Json(channel_info))
 }
 
 async fn get_balance(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
 ) -> Result<Json<responses::BalanceResponse>, Error> {
-    let balance = state.get_balance().await?;
+    let balance = state.ln.get_balance().await?;
 
     Ok(Json(balance))
 }
 
 async fn get_create_invoice(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Query(params): Query<requests::CreateInvoiceParams>,
 ) -> Result<Json<Bolt11>, Error> {
-    let bolt11 = state.create_invoice(params).await?;
+    let bolt11 = state.ln.create_invoice(params).await?;
     Ok(Json(bolt11))
 }
 
 async fn post_pay_on_chain(
-    State(state): State<Nodemanger>,
+    State(state): State<NodeMangerState>,
     Json(payload): Json<requests::PayOnChainRequest>,
 ) -> Result<Json<String>, Error> {
-    let res = state.send_to_onchain_address(payload).await?;
+    let res = state.ln.send_to_onchain_address(payload).await?;
 
     Ok(Json(res))
+}
+
+async fn in_circulation(State(state): State<NodeMangerState>) -> Result<Json<Amount>, Error> {
+    let amount = state.db.get_in_circulation().await?;
+
+    Ok(Json(amount))
 }

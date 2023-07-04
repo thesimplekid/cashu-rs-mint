@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
 use cashu_crab::nuts::nut00::Proofs;
-use cashu_crab::Sha256;
+use cashu_crab::{Amount, Sha256};
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
@@ -15,6 +15,9 @@ use crate::types::KeysetInfo;
 const KEYSETS: TableDefinition<&str, &str> = TableDefinition::new("keysets");
 
 const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
+
+// Config Keys
+const IN_CIRCULATION: &str = "in_circulation";
 
 // Key: Random Hash
 // Value Serialized Invoice Info
@@ -160,6 +163,35 @@ impl Db {
 
         Ok(last_pay_index)
     }
+
+    pub async fn set_in_circulation(&self, amount: &Amount) -> Result<()> {
+        let db = self.db.lock().await;
+
+        let write_txn = db.begin_write()?;
+        {
+            let mut config_table = write_txn.open_table(CONFIG)?;
+
+            config_table.insert(IN_CIRCULATION, serde_json::to_string(amount)?.as_str())?;
+        }
+        write_txn.commit()?;
+
+        Ok(())
+    }
+
+    pub async fn get_in_circulation(&self) -> Result<Amount> {
+        let db = self.db.lock().await;
+
+        let read_txn = db.begin_read()?;
+        let config_table = read_txn.open_table(CONFIG)?;
+
+        let last_pay_index = match config_table.get(IN_CIRCULATION)? {
+            Some(contact) => serde_json::from_str(contact.value())?,
+            None => Amount::ZERO,
+        };
+
+        Ok(last_pay_index)
+    }
+
     pub async fn add_invoice(&self, invoice_info: &InvoiceInfo) -> Result<()> {
         let db = self.db.lock().await;
 

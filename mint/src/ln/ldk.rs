@@ -181,7 +181,6 @@ impl LnNodeManager for Ldk {
             ldk_node::bitcoin::secp256k1::PublicKey::from_slice(&public_key.serialize()).unwrap();
 
         let push_amount = push_amount.map(|a| a.to_msat());
-
         let _ = self.node.connect_open_channel(
             node_pubkey,
             net_address,

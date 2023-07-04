@@ -121,9 +121,14 @@ async fn main() -> anyhow::Result<()> {
 
     let settings_clone = settings.clone();
 
+    let db_clone = db.clone();
     tokio::spawn(async move {
         loop {
-            if let Err(err) = ln_clone.node_manager.start_server(&settings_clone).await {
+            if let Err(err) = ln_clone
+                .node_manager
+                .start_server(&settings_clone, db_clone.clone())
+                .await
+            {
                 warn!("{:?}", err)
             }
         }
@@ -317,6 +322,10 @@ async fn post_mint(
                 warn!("{}", err);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
+            let in_circulation = db.get_in_circulation().await.unwrap() + invoice.amount;
+
+            db.set_in_circulation(&in_circulation);
+
             mint_res
         }
         Err(err) => match db.get_invoice_info(&hash).await {
@@ -393,20 +402,27 @@ async fn post_melt(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    let melt_response = mint
+        .process_melt_request(&payload, &pay_res.0, pay_res.1)
+        .map_err(|err| {
+            warn!("{}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     state
         .db
         .add_used_proofs(&payload.proofs)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let in_circulation = state.db.get_in_circulation().await.unwrap();
+
+    let in_circulation = in_circulation - payload.proofs_amount() + melt_response.change_amount();
+
+    state.db.set_in_circulation(&in_circulation).await.unwrap();
+
     // Process mint request
-    Ok(Json(
-        mint.process_melt_request(&payload, &pay_res.0, pay_res.1)
-            .map_err(|err| {
-                warn!("{}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?,
-    ))
+    Ok(Json(melt_response))
 }
 
 async fn post_check(
