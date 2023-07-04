@@ -81,9 +81,10 @@ pub enum LnBackend {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
-    pub path: PathBuf,
-    pub invoice_description: Option<String>,
     pub ln_backend: LnBackend,
+    pub cln_path: Option<PathBuf>,
+    pub geenlight_invoice_code: Option<String>,
+    pub invoice_description: Option<String>,
     pub fee_percent: f64,
     pub reserve_fee_min: Amount,
 }
@@ -133,6 +134,12 @@ impl Settings {
         let settings: Settings = config.try_deserialize()?;
 
         debug!("{settings:?}");
+
+        match settings.ln.ln_backend {
+            LnBackend::Cln => assert!(settings.ln.cln_path.is_some()),
+            LnBackend::Greenlight => assert!(settings.ln.geenlight_invoice_code.is_some()),
+            LnBackend::Ldk => (),
+        }
 
         Ok(settings)
     }

@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -53,8 +54,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db = Db::new(db_path).await.unwrap();
 
-    let cln_socket = utils::expand_path(settings.ln.path.to_str().unwrap()).unwrap();
-
     let all_keysets = db.get_all_keyset_info().await?;
 
     let inactive_keysets: HashMap<String, nut02::mint::KeySet> = all_keysets
@@ -83,8 +82,19 @@ async fn main() -> anyhow::Result<()> {
 
     let mint = Arc::new(Mutex::new(mint));
 
-    let ln = match settings.ln.ln_backend {
+    let ln = match &settings.ln.ln_backend {
         LnBackend::Cln => {
+            let cln_socket = utils::expand_path(
+                settings
+                    .ln
+                    .cln_path
+                    .clone()
+                    .ok_or(anyhow!("cln socket not defined"))?
+                    .to_str()
+                    .ok_or(anyhow!("cln socket not defined"))?,
+            )
+            .ok_or(anyhow!("cln socket not defined"))?;
+
             let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await?);
             Ln {
                 ln_processor: cln.clone(),
