@@ -228,29 +228,6 @@ pub fn ln() -> Html {
     }}
         </a>
     }
-    /*
-    html! {
-    <div>
-    <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
-        <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"> { "lightning" } </h5>
-            if invoice.is_some() {
-                <div class="flex flex-col max-w-md gap-2 p-6 rounded-md shadow-md dark:bg-gray-900 dark:text-gray-100">
-        <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
-            {"Invoice"}
-        </h2>
-        <p class="flex-1 dark:text-gray-400">{invoice.as_ref().unwrap() }</p>
-        <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
-            <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Close"}</button>
-            // TODO: Copy button
-            // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
-        </div>
-    </div>
-            }
-
-        if *pay_invoice {
-
-    </a>
-        }*/
 }
 
 fn post_pay_invoice(pay_invoice_request: Bolt11) {
