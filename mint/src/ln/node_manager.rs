@@ -34,8 +34,6 @@ struct NodeMangerState {
 
 impl Nodemanger {
     pub async fn start_server(&self, settings: &Settings, db: Db) -> Result<(), Error> {
-        let manager = self.clone();
-
         let state = NodeMangerState {
             ln: self.clone(),
             db,
@@ -53,7 +51,7 @@ impl Nodemanger {
             .route("/pay-on-chain", post(post_pay_on_chain))
             .route("/close", post(post_close_channel))
             // Mint Routes
-            .route("/circulation", get(in_circulation))
+            .route("/outstanding", get(in_circulation))
             .layer(CorsLayer::permissive())
             .with_state(state);
 
