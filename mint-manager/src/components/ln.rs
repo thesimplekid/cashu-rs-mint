@@ -88,7 +88,7 @@ pub fn ln() -> Html {
     let decoded_invoice_desc = use_state(|| None);
 
     let state_clone = state.clone();
-    let recieve = { Callback::from(move |_| state_clone.set(State::Receive)) };
+    let receive = { Callback::from(move |_| state_clone.set(State::Receive)) };
 
     let state_clone = state.clone();
     let pay_button = { Callback::from(move |_| state_clone.set(State::Send)) };
@@ -174,7 +174,7 @@ pub fn ln() -> Html {
         State::Transactions => {
             html!{
             <>
-            <button onclick={recieve} class="p-8 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Recieve"}</button>
+            <button onclick={receive} class="p-8 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Receive"}</button>
             <button onclick={pay_button} class="p-8 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Send"}</button>
             </>
             }
