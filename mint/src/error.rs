@@ -40,6 +40,12 @@ impl From<ParseOrSemanticError> for Error {
     }
 }
 
+impl From<url::ParseError> for Error {
+    fn from(_err: url::ParseError) -> Self {
+        Self::DecodeInvoice
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     code: u16,

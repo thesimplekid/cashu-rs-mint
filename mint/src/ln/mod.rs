@@ -14,6 +14,7 @@ pub mod cln;
 pub mod error;
 pub mod greenlight;
 pub mod ldk;
+pub mod lnurl;
 pub mod node_manager;
 
 #[derive(Clone)]

@@ -12,6 +12,7 @@ pub enum Error {
     WrongClnResponse,
     Custom(String),
     TonicError(String),
+    InvalidLnUrl,
 }
 
 impl std::error::Error for Error {}
@@ -24,6 +25,7 @@ impl fmt::Display for Error {
             Self::WrongClnResponse => write!(f, "Cln returned the wrong response"),
             Self::Custom(code) => write!(f, "{}", code),
             Self::TonicError(code) => write!(f, "{}", code),
+            Self::InvalidLnUrl => write!(f, "LnUrl is invalid"),
         }
     }
 }
@@ -106,6 +108,18 @@ impl From<bip39::Error> for Error {
     }
 }
 
+impl From<url::ParseError> for Error {
+    fn from(_err: url::ParseError) -> Self {
+        Self::Custom("Could not parse url".to_string())
+    }
+}
+
+impl From<hex::FromHexError> for Error {
+    fn from(err: hex::FromHexError) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     code: u16,
@@ -136,7 +150,8 @@ impl IntoResponse for Error {
             // REVIEW: Most of these error codes shouldnt be returned on response
             // Keeping it for now to make debugging easier
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
-            Self::TonicError(code) => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
+            Self::TonicError(_code) => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
+            Self::InvalidLnUrl => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
         }
     }
 }
