@@ -266,7 +266,7 @@ pub fn channels() -> Html {
                     let remote_balance = channel.value - channel.balance;
 
                     html!{
-                        <Channel delete_channel={delete_channel.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance}/>
+                        <Channel delete_channel={delete_channel.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance} status={channel.status}/>
                 }}).collect::<Html>()
         }
                 <button onclick={open_channel_button} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">

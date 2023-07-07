@@ -1,5 +1,6 @@
 use bitcoin::secp256k1::PublicKey;
 use cashu_crab::Amount;
+use node_manager_types::ChannelStatus;
 use yew::prelude::*;
 
 #[derive(PartialEq, Properties, Clone)]
@@ -11,6 +12,7 @@ pub struct ChannelProps {
     pub peer_id: Option<PublicKey>,
     pub local_balance: Amount,
     pub remote_balance: Amount,
+    pub status: ChannelStatus,
 }
 
 #[function_component(Channel)]
@@ -21,6 +23,7 @@ pub fn entry(props: &ChannelProps) -> Html {
         peer_id,
         local_balance,
         remote_balance,
+        status,
     } = props.clone();
 
     let on_delete = {
@@ -39,6 +42,7 @@ pub fn entry(props: &ChannelProps) -> Html {
         }
             <p class="font-normal text-gray-700 dark:text-gray-400">{format!("Local Balance: {}", local_balance.to_sat())}</p>
             <p class="font-normal text-gray-700 dark:text-gray-400">{format!("Remote Balance: {}", remote_balance.to_sat())}</p>
+            <p class="font-normal text-gray-700 dark:text-gray-400">{ format!("Status: {}", status.to_string() ) }</p>
         </div>
         <div class="p-2 w-full flex justify-end">
             <button type="button" class="focus:outline-none text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900" onclick={on_delete}> {"Close"} </button>

@@ -40,12 +40,23 @@ pub mod requests {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ChannelStatus {
     Active,
     Inactive,
     PendingClose,
     PendingOpen,
+}
+
+impl ToString for ChannelStatus {
+    fn to_string(&self) -> String {
+        match self {
+            ChannelStatus::Active => "Active".to_string(),
+            ChannelStatus::Inactive => "Inactive".to_string(),
+            ChannelStatus::PendingClose => "PendingClose".to_string(),
+            ChannelStatus::PendingOpen => "PendingOpen".to_string(),
+        }
+    }
 }
 
 pub mod responses {
