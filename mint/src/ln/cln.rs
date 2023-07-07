@@ -13,17 +13,18 @@ use cln_rpc::model::responses::ListpeerchannelsChannelsState;
 use cln_rpc::model::responses::PayStatus;
 use cln_rpc::model::ListpeerchannelsChannels;
 use cln_rpc::model::{
-    requests::ListpeerchannelsRequest, InvoiceRequest, KeysendRequest, ListinvoicesRequest,
-    NewaddrRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse, WithdrawRequest,
+    requests::ListpeerchannelsRequest, InvoiceRequest, KeysendRequest, ListfundsChannels,
+    ListinvoicesRequest, NewaddrRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse,
+    WithdrawRequest,
 };
 use cln_rpc::model::{CloseRequest, FundchannelRequest};
-use cln_rpc::primitives::AmountOrAll;
 use cln_rpc::primitives::{Amount as CLN_Amount, AmountOrAny};
+use cln_rpc::primitives::{AmountOrAll, ChannelState};
 use futures::{Stream, StreamExt};
 use log::{debug, warn};
 use node_manager_types::responses::BalanceResponse;
-use node_manager_types::Bolt11;
 use node_manager_types::{requests, responses};
+use node_manager_types::{Bolt11, ChannelStatus};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -300,24 +301,17 @@ impl LnNodeManager for Cln {
     async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
-            .call(cln_rpc::Request::ListPeerChannels(
-                ListpeerchannelsRequest { id: None },
+            .call(cln_rpc::Request::ListFunds(
+                cln_rpc::model::ListfundsRequest { spent: Some(false) },
             ))
             .await?;
 
         let channels = match cln_response {
-            cln_rpc::Response::ListPeerChannels(peer_channels) => {
-                let channels;
-                if let Some(peer_channels) = peer_channels.channels {
-                    channels = peer_channels
-                        .into_iter()
-                        .flat_map(from_list_channels_to_info)
-                        .collect();
-                } else {
-                    channels = vec![];
-                }
-                channels
-            }
+            cln_rpc::Response::ListFunds(channels) => channels
+                .channels
+                .iter()
+                .flat_map(from_channel_to_info)
+                .collect(),
             _ => {
                 warn!("CLN returned wrong response kind");
                 return Err(Error::WrongClnResponse);
@@ -473,12 +467,14 @@ impl LnNodeManager for Cln {
         let mut cln_client = self.cln_client.lock().await;
 
         let destination = peer_id.map(|x| x.to_string());
-
+        debug!("{}", channel_id);
+        debug!("{:?}", destination);
         let cln_response = cln_client
             .call(cln_rpc::Request::Close(CloseRequest {
                 id: channel_id,
                 unilateraltimeout: None,
-                destination,
+                // FIXME:
+                destination: None,
                 fee_negotiation_step: None,
                 wrong_funding: None,
                 force_lease_closed: None,
@@ -550,7 +546,8 @@ fn from_open_request_to_fund_request(
     Ok(FundchannelRequest {
         id: public_key,
         amount,
-        feerate: None,
+        // FIXME:
+        feerate: Some(cln_rpc::primitives::Feerate::PerKb(10)),
         announce: None,
         minconf: None,
         push_msat: push_amount,
@@ -563,9 +560,38 @@ fn from_open_request_to_fund_request(
     })
 }
 
-fn from_list_channels_to_info(
+fn from_channel_to_info(channel: &ListfundsChannels) -> Result<responses::ChannelInfo, Error> {
+    let peer_pubkey = PublicKey::from_slice(&channel.peer_id.serialize())?;
+    let channel_id = channel
+        .channel_id
+        .ok_or(Error::Custom("No Channel Id".to_string()))?
+        .to_string();
+    let balance = channel.our_amount_msat;
+    let value = channel.amount_msat;
+    let is_usable = channel.connected;
+
+    // FIXME:
+    let status = match channel.state {
+        ChannelState::OPENINGD => ChannelStatus::PendingOpen,
+        ChannelState::CHANNELD_NORMAL => ChannelStatus::Active,
+        ChannelState::CHANNELD_SHUTTING_DOWN => ChannelStatus::PendingClose,
+        _ => ChannelStatus::Inactive,
+    };
+
+    Ok(responses::ChannelInfo {
+        peer_pubkey,
+        channel_id,
+        balance: Amount::from_msat(balance.msat()),
+        value: Amount::from_msat(value.msat()),
+        is_usable,
+        status,
+    })
+}
+
+fn _from_list_channels_to_info(
     list_channel: ListpeerchannelsChannels,
 ) -> Result<responses::ChannelInfo, Error> {
+    debug!("{:?}", list_channel.funding);
     let remote_balance = list_channel.funding.as_ref().map_or(Amount::ZERO, |a| {
         Amount::from_msat(
             a.remote_funds_msat
@@ -586,6 +612,13 @@ fn from_list_channels_to_info(
         .map(|s| matches!(s, ListpeerchannelsChannelsState::CHANNELD_NORMAL))
         .unwrap_or(false);
 
+    let status = match list_channel.state {
+        Some(ListpeerchannelsChannelsState::CHANNELD_NORMAL) => ChannelStatus::Active,
+        Some(ListpeerchannelsChannelsState::OPENINGD) => ChannelStatus::PendingOpen,
+        // FIXME: This isnt exhuastive
+        _ => ChannelStatus::PendingClose,
+    };
+
     Ok(responses::ChannelInfo {
         peer_pubkey: PublicKey::from_slice(
             &list_channel
@@ -596,9 +629,10 @@ fn from_list_channels_to_info(
         channel_id: list_channel
             .channel_id
             .ok_or(Error::Custom("No Channel Id".to_string()))?
-            .to_vec(),
+            .to_string(),
         balance: local_balance,
         value: local_balance + remote_balance,
         is_usable,
+        status,
     })
 }

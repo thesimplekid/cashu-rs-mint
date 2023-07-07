@@ -24,6 +24,7 @@ use gl_client::signer::model::greenlight::cln::InvoiceResponse;
 use gl_client::signer::Signer;
 use gl_client::tls::TlsConfig;
 use log::debug;
+use node_manager_types::ChannelStatus;
 use node_manager_types::{requests, responses, Bolt11};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -538,18 +539,26 @@ fn from_list_channels_to_info(
         .map(|s| matches!(s, 0))
         .unwrap_or(false);
 
+    let status = if list_channel.state.unwrap_or(0) > 1 {
+        ChannelStatus::Active
+    } else {
+        ChannelStatus::Inactive
+    };
+
     Ok(responses::ChannelInfo {
         peer_pubkey: PublicKey::from_slice(
             &list_channel
                 .peer_id
                 .ok_or(Error::Custom("No peer id".to_string()))?,
         )?,
-        channel_id: list_channel
-            .channel_id
-            .ok_or(Error::Custom("No Channel Id".to_string()))?
-            .to_vec(),
+        channel_id: String::from_utf8(
+            list_channel
+                .channel_id
+                .ok_or(Error::Custom("No Channel Id".to_string()))?,
+        )?,
         balance: local_balance,
         value: local_balance + remote_balance,
         is_usable,
+        status,
     })
 }

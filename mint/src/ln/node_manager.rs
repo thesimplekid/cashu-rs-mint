@@ -197,14 +197,14 @@ impl Nodemanger {
         match &self {
             Nodemanger::Ldk(ldk) => {
                 ldk.close(
-                    String::from_utf8(close_channel_request.channel_id)?,
+                    close_channel_request.channel_id,
                     close_channel_request.peer_id,
                 )
                 .await
             }
             Nodemanger::Cln(cln) => {
                 cln.close(
-                    String::from_utf8(close_channel_request.channel_id)?,
+                    close_channel_request.channel_id,
                     close_channel_request.peer_id,
                 )
                 .await

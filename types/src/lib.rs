@@ -35,9 +35,17 @@ pub mod requests {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CloseChannel {
-        pub channel_id: Vec<u8>,
+        pub channel_id: String,
         pub peer_id: Option<PublicKey>,
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChannelStatus {
+    Active,
+    Inactive,
+    PendingClose,
+    PendingOpen,
 }
 
 pub mod responses {
@@ -45,6 +53,8 @@ pub mod responses {
     use cashu_crab::{types::InvoiceStatus, Amount, Sha256};
     // use ldk_node::ChannelDetails;
     use serde::{Deserialize, Serialize};
+
+    use crate::ChannelStatus;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PayInvoiceResponse {
@@ -66,10 +76,11 @@ pub mod responses {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ChannelInfo {
         pub peer_pubkey: PublicKey,
-        pub channel_id: Vec<u8>,
+        pub channel_id: String,
         pub balance: Amount,
         pub value: Amount,
         pub is_usable: bool,
+        pub status: ChannelStatus,
     }
     /*
     impl From<ChannelDetails> for ChannelInfo {

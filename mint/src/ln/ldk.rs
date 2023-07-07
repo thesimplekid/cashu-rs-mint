@@ -15,6 +15,7 @@ use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use ldk_node::{Event, Node};
 use log::debug;
 use node_manager_types::responses::ChannelInfo;
+use node_manager_types::ChannelStatus;
 use node_manager_types::{requests, responses, Bolt11};
 use std::net::{Ipv4Addr, SocketAddr};
 
@@ -199,7 +200,7 @@ impl LnNodeManager for Ldk {
 
         let channel_info = channels_details
             .into_iter()
-            .map(channel_info_from_details)
+            .flat_map(channel_info_from_details)
             .collect();
 
         Ok(channel_info)
@@ -283,14 +284,22 @@ impl LnNodeManager for Ldk {
     }
 }
 
-fn channel_info_from_details(details: ChannelDetails) -> ChannelInfo {
+fn channel_info_from_details(details: ChannelDetails) -> Result<ChannelInfo, Error> {
     let peer_pubkey =
         bitcoin::secp256k1::PublicKey::from_str(&details.counterparty_node_id.to_string()).unwrap();
-    ChannelInfo {
+
+    // FIXME:
+    let status = match details.is_usable {
+        true => ChannelStatus::Active,
+        false => ChannelStatus::Inactive,
+    };
+
+    Ok(ChannelInfo {
         peer_pubkey,
-        channel_id: details.channel_id.0.to_vec(),
+        channel_id: String::from_utf8(details.channel_id.0.to_vec())?,
         balance: Amount::from_msat(details.balance_msat),
         value: Amount::from_sat(details.channel_value_sats),
         is_usable: details.is_usable,
-    }
+        status,
+    })
 }
