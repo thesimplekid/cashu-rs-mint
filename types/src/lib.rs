@@ -46,6 +46,7 @@ pub enum ChannelStatus {
     Inactive,
     PendingClose,
     PendingOpen,
+    Closed,
 }
 
 impl ToString for ChannelStatus {
@@ -55,6 +56,7 @@ impl ToString for ChannelStatus {
             ChannelStatus::Inactive => "Inactive".to_string(),
             ChannelStatus::PendingClose => "PendingClose".to_string(),
             ChannelStatus::PendingOpen => "PendingOpen".to_string(),
+            ChannelStatus::Closed => "Closed".to_string(),
         }
     }
 }

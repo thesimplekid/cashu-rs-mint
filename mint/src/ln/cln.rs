@@ -311,6 +311,7 @@ impl LnNodeManager for Cln {
                 .channels
                 .iter()
                 .flat_map(from_channel_to_info)
+                .filter(|x| x.status.ne(&ChannelStatus::Closed))
                 .collect(),
             _ => {
                 warn!("CLN returned wrong response kind");
@@ -575,6 +576,8 @@ fn from_channel_to_info(channel: &ListfundsChannels) -> Result<responses::Channe
         ChannelState::OPENINGD => ChannelStatus::PendingOpen,
         ChannelState::CHANNELD_NORMAL => ChannelStatus::Active,
         ChannelState::CHANNELD_SHUTTING_DOWN => ChannelStatus::PendingClose,
+        ChannelState::CLOSINGD_COMPLETE => ChannelStatus::Closed,
+        ChannelState::ONCHAIN => ChannelStatus::Closed,
         _ => ChannelStatus::Inactive,
     };
 
@@ -615,7 +618,6 @@ fn _from_list_channels_to_info(
     let status = match list_channel.state {
         Some(ListpeerchannelsChannelsState::CHANNELD_NORMAL) => ChannelStatus::Active,
         Some(ListpeerchannelsChannelsState::OPENINGD) => ChannelStatus::PendingOpen,
-        // FIXME: This isnt exhuastive
         _ => ChannelStatus::PendingClose,
     };
 
