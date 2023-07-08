@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use cashu_crab::{lightning_invoice::InvoiceDescription, Amount, Invoice};
+use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use node_manager_types::Bolt11;
 use serde_json::Value;
@@ -67,20 +68,23 @@ pub fn ln() -> Html {
         Callback::from(move |_: MouseEvent| {
             let invoice = invoice.clone();
             let description = description.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                let fetched_channels: Bolt11 = Request::get(&format!(
-                    "http://127.0.0.1:8086/invoice?msat={}&description={}",
-                    amount_value.to_msat(),
-                    description
-                ))
-                .send()
-                .await
-                .unwrap()
-                .json()
-                .await
-                .unwrap();
-                invoice.set(Some(fetched_channels.bolt11));
-            });
+            if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+                wasm_bindgen_futures::spawn_local(async move {
+                    let fetched_channels: Bolt11 = Request::get(&format!(
+                        "http://127.0.0.1:8086/invoice?msat={}&description={}",
+                        amount_value.to_msat(),
+                        description
+                    ))
+                    .header("Authorization", &format!("Bearer {}", jwt))
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap();
+                    invoice.set(Some(fetched_channels.bolt11));
+                });
+            }
         })
     };
 
@@ -231,16 +235,19 @@ pub fn ln() -> Html {
 }
 
 fn post_pay_invoice(pay_invoice_request: Bolt11) {
-    wasm_bindgen_futures::spawn_local(async move {
-        let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/pay-invoice")
-            .json(&pay_invoice_request)
-            .unwrap()
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
-        log::debug!("{:?}", _fetched_channels);
-    });
+    if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+        wasm_bindgen_futures::spawn_local(async move {
+            let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/pay-invoice")
+                .header("Authorization", &format!("Bearer {}", jwt))
+                .json(&pay_invoice_request)
+                .unwrap()
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            log::debug!("{:?}", _fetched_channels);
+        });
+    }
 }

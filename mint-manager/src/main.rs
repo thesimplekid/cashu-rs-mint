@@ -1,4 +1,5 @@
 mod app;
+mod bindings;
 mod components;
 
 use app::App;

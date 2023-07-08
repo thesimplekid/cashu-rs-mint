@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use bitcoin::secp256k1::PublicKey;
 use cashu_crab::Amount;
+use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use node_manager_types::requests::{self, OpenChannelRequest};
 use node_manager_types::responses::ChannelInfo;
@@ -169,15 +170,19 @@ pub fn open_channel(props: &OpenChannelProps) -> Html {
 
 fn post_open_channel(open_channel_request: OpenChannelRequest) {
     wasm_bindgen_futures::spawn_local(async move {
-        let _fetched_channels: ChannelInfo = Request::post("http://127.0.0.1:8086/open-channel")
-            .json(&open_channel_request)
-            .unwrap()
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
+        if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+            let _fetched_channels: ChannelInfo =
+                Request::post("http://127.0.0.1:8086/open-channel")
+                    .header("Authorization", &format!("Bearer {}", jwt))
+                    .json(&open_channel_request)
+                    .unwrap()
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap();
+        }
     });
 }
 
@@ -192,15 +197,18 @@ pub fn channels() -> Html {
             move |_| {
                 let channels = channels.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    let fetched_channels: Vec<ChannelInfo> =
-                        Request::get("http://127.0.0.1:8086/channels")
-                            .send()
-                            .await
-                            .unwrap()
-                            .json()
-                            .await
-                            .unwrap();
-                    channels.set(fetched_channels);
+                    if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+                        let fetched_channels: Vec<ChannelInfo> =
+                            Request::get("http://127.0.0.1:8086/channels")
+                                .header("Authorization", &format!("Bearer {}", jwt))
+                                .send()
+                                .await
+                                .unwrap()
+                                .json()
+                                .await
+                                .unwrap();
+                        channels.set(fetched_channels);
+                    }
                 });
                 || ()
             },
@@ -222,15 +230,18 @@ pub fn channels() -> Html {
             post_close_channel(close_channel_request);
             let channels = channels.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let fetched_channels: Vec<ChannelInfo> =
-                    Request::get("http://127.0.0.1:8086/channels")
-                        .send()
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
-                channels.set(fetched_channels);
+                if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+                    let fetched_channels: Vec<ChannelInfo> =
+                        Request::get("http://127.0.0.1:8086/channels")
+                            .header("Authorization", &format!("Bearer {}", jwt))
+                            .send()
+                            .await
+                            .unwrap()
+                            .json()
+                            .await
+                            .unwrap();
+                    channels.set(fetched_channels);
+                }
             });
         })
     };
@@ -288,15 +299,18 @@ pub fn channels() -> Html {
 
 fn post_close_channel(close_channel_request: requests::CloseChannel) {
     wasm_bindgen_futures::spawn_local(async move {
-        let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/close")
-            .json(&close_channel_request)
-            .unwrap()
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
-        log::debug!("{:?}", _fetched_channels);
+        if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+            let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/close")
+                .header("Authorization", &format!("Bearer {}", jwt))
+                .json(&close_channel_request)
+                .unwrap()
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            log::debug!("{:?}", _fetched_channels);
+        }
     });
 }

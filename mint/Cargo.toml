@@ -34,3 +34,7 @@ tower-http = { version = "0.4.1", features = ["cors"] }
 bech32 = "0.9.1"
 hex = "0.4.3"
 url = "2.4.0"
+nostr = "0.22.0"
+jsonwebtoken = "8.3.0"
+axum-extra = { version = "0.7.4", features = ["cookie"] }
+time = "0.3.22"

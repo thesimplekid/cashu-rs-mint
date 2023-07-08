@@ -2,22 +2,30 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::http::{header, StatusCode};
+use axum::middleware;
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use axum_extra::extract::cookie::{Cookie, SameSite};
 use bitcoin::Address;
 use cashu_crab::Amount;
-use log::warn;
+use jsonwebtoken::{encode, EncodingKey, Header};
+use log::{debug, warn};
+use node_manager_types::TokenClaims;
 use node_manager_types::{requests, responses, Bolt11};
+use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
 
 pub use super::error::Error;
+use super::jwt_auth::auth;
 use super::{cln, greenlight, ldk};
 
 use crate::config::Settings;
 use crate::database::Db;
 use crate::ln::LnNodeManager;
+use crate::utils::unix_time;
 
 #[derive(Clone)]
 pub enum Nodemanger {
@@ -27,9 +35,10 @@ pub enum Nodemanger {
 }
 
 #[derive(Clone)]
-struct NodeMangerState {
-    ln: Nodemanger,
-    db: Db,
+pub struct NodeMangerState {
+    pub ln: Nodemanger,
+    pub db: Db,
+    pub settings: Settings,
 }
 
 impl Nodemanger {
@@ -37,21 +46,66 @@ impl Nodemanger {
         let state = NodeMangerState {
             ln: self.clone(),
             db,
+            settings: settings.clone(),
         };
+
+        let state_arc = Arc::new(state.clone());
         // TODO: These should be authed
         let node_manager_service = Router::new()
+            // Auth Routes
+            .route("/nostr-login", post(post_nostr_login))
             // Ln Routes
-            .route("/fund", get(get_funding_address))
-            .route("/open-channel", post(post_new_open_channel))
-            .route("/channels", get(get_list_channels))
-            .route("/balance", get(get_balance))
-            .route("/pay-invoice", post(post_pay_invoice))
-            .route("/pay-keysend", post(post_pay_keysend))
-            .route("/invoice", get(get_create_invoice))
-            .route("/pay-on-chain", post(post_pay_on_chain))
-            .route("/close", post(post_close_channel))
+            .route(
+                "/fund",
+                get(get_funding_address)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/open-channel",
+                post(post_new_open_channel)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/channels",
+                get(get_list_channels)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/balance",
+                get(get_balance)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/pay-invoice",
+                post(post_pay_invoice)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/pay-keysend",
+                post(post_pay_keysend)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/invoice",
+                get(get_create_invoice)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/pay-on-chain",
+                post(post_pay_on_chain)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/close",
+                post(post_close_channel)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
             // Mint Routes
-            .route("/outstanding", get(in_circulation))
+            .route(
+                "/outstanding",
+                get(in_circulation)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
             .layer(CorsLayer::permissive())
             .with_state(state);
 
@@ -212,6 +266,59 @@ impl Nodemanger {
             Nodemanger::Greenlight(_gln) => todo!(),
         }
     }
+}
+
+async fn post_nostr_login(
+    State(state): State<NodeMangerState>,
+    Json(payload): Json<Event>,
+) -> Result<Response<String>, StatusCode> {
+    let event = payload;
+
+    event.verify().map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    debug!("Verified");
+
+    let authorized_users = state.settings.ln.authorized_users;
+
+    if !authorized_users.contains(&event.pubkey) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let now = unix_time();
+    let iat = unix_time();
+    let exp = now + 3600;
+    let claims = TokenClaims {
+        sub: event.pubkey.to_string(),
+        exp,
+        iat,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(state.settings.ln.jwt_secret.as_ref()),
+    )
+    .unwrap();
+
+    let cookie = Cookie::build("token", token.to_owned())
+        .path("/")
+        .max_age(time::Duration::hours(1))
+        .same_site(SameSite::Lax)
+        .http_only(true)
+        .finish();
+
+    let mut response = Response::new(
+        responses::LoginResponse {
+            status: "OK".to_string(),
+            token,
+        }
+        .as_json()
+        .unwrap(),
+    );
+    response
+        .headers_mut()
+        .insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
+    Ok(response)
 }
 
 async fn post_close_channel(

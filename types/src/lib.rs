@@ -107,9 +107,28 @@ pub mod responses {
         }
     }
     */
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct LoginResponse {
+        pub status: String,
+        pub token: String,
+    }
+
+    impl LoginResponse {
+        pub fn as_json(&self) -> anyhow::Result<String> {
+            Ok(serde_json::to_string(self)?)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bolt11 {
     pub bolt11: Invoice,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenClaims {
+    pub sub: String,
+    pub iat: u64,
+    pub exp: u64,
 }

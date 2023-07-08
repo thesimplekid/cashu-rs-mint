@@ -1,4 +1,5 @@
 use cashu_crab::Amount;
+use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use node_manager_types::{requests::PayOnChainRequest, responses::FundingAddressResponse};
 use serde_json::Value;
@@ -22,20 +23,23 @@ pub fn on_chain() -> Html {
         let on_chain_address = on_chain_address.clone();
         let state = state.clone();
         Callback::from(move |_| {
-            let on_chain_address = on_chain_address.clone();
-            let state_clone = state.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                let fetched_channels: FundingAddressResponse =
-                    Request::get("http://127.0.0.1:8086/fund")
-                        .send()
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
-                on_chain_address.set(Some(fetched_channels.address));
-                state_clone.set(State::NewAddress);
-            });
+            if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+                let on_chain_address = on_chain_address.clone();
+                let state_clone = state.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let fetched_channels: FundingAddressResponse =
+                        Request::get("http://127.0.0.1:8086/fund")
+                            .header("Authorization", &format!("Bearer {}", jwt))
+                            .send()
+                            .await
+                            .unwrap()
+                            .json()
+                            .await
+                            .unwrap();
+                    on_chain_address.set(Some(fetched_channels.address));
+                    state_clone.set(State::NewAddress);
+                });
+            }
         })
     };
 
@@ -102,20 +106,23 @@ pub fn on_chain() -> Html {
 
             let txid = txid.clone();
 
-            wasm_bindgen_futures::spawn_local(async move {
-                let response: String =
-                    Request::post(&format!("http://127.0.0.1:8086/pay-on-chain"))
-                        .json(&pay_request)
-                        .unwrap()
-                        .send()
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
-                txid.set(response);
-                state_clone.set(State::Sent);
-            });
+            if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
+                wasm_bindgen_futures::spawn_local(async move {
+                    let response: String =
+                        Request::post(&format!("http://127.0.0.1:8086/pay-on-chain"))
+                            .header("Authorization", &format!("Bearer {}", jwt))
+                            .json(&pay_request)
+                            .unwrap()
+                            .send()
+                            .await
+                            .unwrap()
+                            .json()
+                            .await
+                            .unwrap();
+                    txid.set(response);
+                    state_clone.set(State::Sent);
+                });
+            }
         })
     };
     let close = {

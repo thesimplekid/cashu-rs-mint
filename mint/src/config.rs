@@ -26,10 +26,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use cashu_crab::Amount;
 use config::{Config, ConfigError, File};
+use nostr::key::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -82,6 +87,8 @@ pub enum LnBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
     pub ln_backend: LnBackend,
+    pub authorized_users: HashSet<XOnlyPublicKey>,
+    pub jwt_secret: String,
     pub cln_path: Option<PathBuf>,
     pub geenlight_invoice_code: Option<String>,
     pub invoice_description: Option<String>,

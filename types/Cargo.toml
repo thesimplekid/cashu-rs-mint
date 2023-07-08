@@ -9,3 +9,5 @@ edition = "2021"
 serde = { version = "1.0.164", features = ["derive"] }
 cashu-crab = {path = "../../cashu-crab"}
 bitcoin = { version = "0.30.0", features = ["no-std"] }
+serde_json = "1.0.100"
+anyhow = "1.0.71"

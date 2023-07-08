@@ -13,6 +13,7 @@ use node_manager_types::{requests, responses, Bolt11};
 pub mod cln;
 pub mod error;
 pub mod greenlight;
+pub mod jwt_auth;
 pub mod ldk;
 pub mod lnurl;
 pub mod node_manager;
