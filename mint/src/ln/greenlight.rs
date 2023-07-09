@@ -23,10 +23,10 @@ use gl_client::signer::model::cln::ListpeerchannelsRequest;
 use gl_client::signer::model::greenlight::cln::InvoiceResponse;
 use gl_client::signer::Signer;
 use gl_client::tls::TlsConfig;
-use log::debug;
 use node_manager_types::ChannelStatus;
 use node_manager_types::{requests, responses, Bolt11};
 use tokio::sync::Mutex;
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::database::Db;

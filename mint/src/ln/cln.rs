@@ -20,11 +20,11 @@ use cln_rpc::model::{
 use cln_rpc::primitives::{Amount as CLN_Amount, AmountOrAny};
 use cln_rpc::primitives::{AmountOrAll, ChannelState};
 use futures::{Stream, StreamExt};
-use log::{debug, warn};
 use node_manager_types::responses::BalanceResponse;
 use node_manager_types::{requests, responses};
 use node_manager_types::{Bolt11, ChannelStatus};
 use tokio::sync::Mutex;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use super::{Error, InvoiceInfo, LnNodeManager, LnProcessor};

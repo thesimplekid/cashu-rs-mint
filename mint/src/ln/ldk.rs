@@ -13,11 +13,11 @@ use ldk_node::lightning_invoice::Invoice;
 use ldk_node::{Builder, Config};
 use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use ldk_node::{Event, Node};
-use log::debug;
 use node_manager_types::responses::ChannelInfo;
 use node_manager_types::ChannelStatus;
 use node_manager_types::{requests, responses, Bolt11};
 use std::net::{Ipv4Addr, SocketAddr};
+use tracing::debug;
 
 use crate::config::Settings;
 use crate::database::Db;

@@ -24,9 +24,9 @@ use ln::cln::fee_reserve;
 use ln::greenlight::Greenlight;
 use ln::ldk::Ldk;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
-use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tracing::{debug, warn};
 use types::KeysetInfo;
 use utils::unix_time;
 

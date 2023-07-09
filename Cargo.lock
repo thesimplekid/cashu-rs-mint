@@ -540,7 +540,6 @@ dependencies = [
  "hex",
  "jsonwebtoken",
  "ldk-node",
- "log",
  "node-manager-types",
  "nostr",
  "rand",

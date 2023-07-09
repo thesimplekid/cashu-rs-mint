@@ -11,12 +11,12 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 use bitcoin::Address;
 use cashu_crab::Amount;
 use jsonwebtoken::{encode, EncodingKey, Header};
-use log::{debug, warn};
 use node_manager_types::TokenClaims;
 use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
+use tracing::{debug, warn};
 
 pub use super::error::Error;
 use super::jwt_auth::auth;

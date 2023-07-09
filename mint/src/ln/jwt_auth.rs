@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::{header, Request, StatusCode},
+    http::{Request, StatusCode},
     middleware::Next,
     response::IntoResponse,
     Json,
@@ -11,9 +11,9 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use node_manager_types::TokenClaims;
-use serde::Serialize;
-
 use nostr::key::XOnlyPublicKey;
+use serde::Serialize;
+use tracing::debug;
 
 use super::node_manager::NodeMangerState;
 
@@ -29,7 +29,7 @@ pub async fn auth<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    log::debug!("{:?}", req.headers());
+    debug!("{:?}", req.headers());
     let token = cookie_jar
         .get("token")
         .map(|cookie| cookie.value().to_string())
@@ -45,7 +45,7 @@ pub async fn auth<B>(
                     }
                 })
         });
-    log::debug!(" token {:?}", token);
+    debug!(" token {:?}", token);
     let token = token.ok_or_else(|| {
         let json_error = ErrorResponse {
             status: "fail",
