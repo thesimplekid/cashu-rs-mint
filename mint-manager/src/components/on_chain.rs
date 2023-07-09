@@ -2,7 +2,6 @@ use cashu_crab::Amount;
 use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use node_manager_types::{requests::PayOnChainRequest, responses::FundingAddressResponse};
-use serde_json::Value;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 

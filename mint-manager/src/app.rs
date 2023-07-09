@@ -4,7 +4,7 @@ use cashu_crab::Amount;
 use gloo::storage::LocalStorage;
 use gloo_net::http::Request;
 use gloo_storage::Storage;
-use log::{debug, warn};
+use log::debug;
 use node_manager_types::responses;
 use node_manager_types::responses::BalanceResponse;
 use nostr::event::builder::EventBuilder;

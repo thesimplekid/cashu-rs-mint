@@ -12,12 +12,11 @@ use cln_rpc::model::responses::ListfundsOutputsStatus;
 use cln_rpc::model::responses::ListpeerchannelsChannelsState;
 use cln_rpc::model::responses::PayStatus;
 use cln_rpc::model::ListpeerchannelsChannels;
-use cln_rpc::model::{
-    requests::ListpeerchannelsRequest, InvoiceRequest, KeysendRequest, ListfundsChannels,
-    ListinvoicesRequest, NewaddrRequest, PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse,
-    WithdrawRequest,
-};
 use cln_rpc::model::{CloseRequest, FundchannelRequest};
+use cln_rpc::model::{
+    InvoiceRequest, KeysendRequest, ListfundsChannels, ListinvoicesRequest, NewaddrRequest,
+    PayRequest, WaitanyinvoiceRequest, WaitanyinvoiceResponse, WithdrawRequest,
+};
 use cln_rpc::primitives::{Amount as CLN_Amount, AmountOrAny};
 use cln_rpc::primitives::{AmountOrAll, ChannelState};
 use futures::{Stream, StreamExt};
@@ -102,7 +101,9 @@ impl LnProcessor for Cln {
         let last_pay_index = self.db.get_last_pay_index().await?;
         let mut invoices = invoice_stream(&self.rpc_socket, Some(last_pay_index)).await?;
 
+        debug!("Waiting for invoice");
         while let Some(invoice) = invoices.next().await {
+            debug!("Invoice Paid");
             if let Some(pay_idx) = invoice.pay_index {
                 self.db.set_last_pay_index(pay_idx).await?;
             }
@@ -140,7 +141,6 @@ impl LnProcessor for Cln {
 
         let status = match cln_response {
             cln_rpc::Response::ListInvoices(invoice_response) => {
-                debug!("{:?}", invoice_response);
                 let i = invoice_response.invoices[0].clone();
 
                 i.status.into()

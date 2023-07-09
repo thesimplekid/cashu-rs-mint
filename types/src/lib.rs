@@ -64,7 +64,6 @@ impl ToString for ChannelStatus {
 pub mod responses {
     use bitcoin::secp256k1::PublicKey;
     use cashu_crab::{types::InvoiceStatus, Amount, Sha256};
-    // use ldk_node::ChannelDetails;
     use serde::{Deserialize, Serialize};
 
     use crate::ChannelStatus;
