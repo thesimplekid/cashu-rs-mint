@@ -82,7 +82,7 @@ pub fn login() -> Html {
 }
 
 #[function_component(Balance)]
-pub fn balance() -> HtmlResult {
+pub fn balance() -> Html {
     let balance = use_state(|| BalanceResponse::default());
     {
         let balance = balance.clone();
@@ -112,7 +112,7 @@ pub fn balance() -> HtmlResult {
     let total_balance = balance.on_chain_total + balance.ln;
     let pending = balance.on_chain_total - balance.on_chain_spendable;
 
-    Ok(html! {
+    html! {
     <>
 
     <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
@@ -123,7 +123,7 @@ pub fn balance() -> HtmlResult {
     </a>
 
     </>
-    })
+    }
 }
 
 #[function_component(Cashu)]
@@ -167,9 +167,28 @@ pub fn cashu() -> HtmlResult {
 
 #[function_component(App)]
 pub fn app() -> Html {
+    let logged_in = use_state(|| false);
+
+    {
+        let logged_in = logged_in.clone();
+        use_effect_with_deps(
+            move |_| {
+                wasm_bindgen_futures::spawn_local(async move {
+                    let logged_in = logged_in.clone();
+                    if let Ok(_jwt) = LocalStorage::get::<String>("auth_token") {
+                        logged_in.set(true);
+                    }
+                });
+
+                || ()
+            },
+            (),
+        );
+    }
+
     html! {
             <main>
-        <Login/>
+        if *logged_in {
       <div class="flex flex-row mb-4">
         <div class="p-2 w-1/3">
           <Balance/>
@@ -189,6 +208,10 @@ pub fn app() -> Html {
           <Channels/>
         </div>
       </div>
+        } else {
+
+        <Login/>
+        }
     </main>
 
         }
