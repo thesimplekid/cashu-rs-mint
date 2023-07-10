@@ -3385,6 +3385,7 @@ dependencies = [
 name = "trunk-template"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitcoin 0.30.0",
  "cashu-crab",
  "gloo",

@@ -1,224 +1,225 @@
+use anyhow::Result;
 use cashu_crab::Amount;
-use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use node_manager_types::{requests::PayOnChainRequest, responses::FundingAddressResponse};
 use web_sys::HtmlInputElement;
+use yew::platform::spawn_local;
 use yew::prelude::*;
 
-#[derive(Clone)]
-enum State {
-    Transactions,
-    NewAddress,
-    Send,
-    Sent,
+async fn get_new_addr(jwt: &str, new_addr_callback: Callback<String>) -> Result<()> {
+    let fetched_channels: FundingAddressResponse = Request::get("http://127.0.0.1:8086/fund")
+        .header("Authorization", &format!("Bearer {}", jwt))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    new_addr_callback.emit(fetched_channels.address);
+
+    Ok(())
 }
 
-#[function_component(OnChain)]
-pub fn on_chain() -> Html {
-    let state = use_state(|| State::Transactions);
-    let on_chain_address = use_state(|| None);
+async fn pay_on_chain(
+    jwt: &str,
+    pay_request: PayOnChainRequest,
+    pay_on_chain_callback: Callback<String>,
+) -> Result<()> {
+    let response: String = Request::post(&format!("http://127.0.0.1:8086/pay-on-chain"))
+        .header("Authorization", &format!("Bearer {}", jwt))
+        .json(&pay_request)?
+        .send()
+        .await?
+        .json()
+        .await?;
 
-    let generate_address = {
-        let on_chain_address = on_chain_address.clone();
-        let state = state.clone();
-        Callback::from(move |_| {
-            if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
-                let on_chain_address = on_chain_address.clone();
-                let state_clone = state.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    let fetched_channels: FundingAddressResponse =
-                        Request::get("http://127.0.0.1:8086/fund")
-                            .header("Authorization", &format!("Bearer {}", jwt))
-                            .send()
-                            .await
-                            .unwrap()
-                            .json()
-                            .await
-                            .unwrap();
-                    on_chain_address.set(Some(fetched_channels.address));
-                    state_clone.set(State::NewAddress);
+    pay_on_chain_callback.emit(response);
+
+    Ok(())
+}
+
+#[derive(Properties, PartialEq, Default, Clone)]
+pub struct Props {
+    pub jwt: String,
+}
+
+pub enum Msg {
+    FetechNewAddr,
+    NewAddr(String),
+    Close,
+    SendView,
+    Pay,
+    Paid(String),
+}
+
+#[derive(Default)]
+enum View {
+    #[default]
+    Transactions,
+    NewAddress(String),
+    Send,
+    Sent(String),
+}
+
+#[derive(Default)]
+pub struct OnChain {
+    view: View,
+    amount_node_ref: NodeRef,
+    address_node_ref: NodeRef,
+}
+
+impl Component for OnChain {
+    type Message = Msg;
+    type Properties = Props;
+
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Msg::FetechNewAddr => {
+                let callback = ctx.link().callback(Msg::NewAddr);
+                let jwt = ctx.props().jwt.clone();
+                spawn_local(async move {
+                    get_new_addr(&jwt, callback).await.ok();
                 });
+                false
             }
-        })
-    };
-
-    let amount_node_ref = use_node_ref();
-    let amount_value_handle = use_state(|| Amount::ZERO);
-    let amount_value = (*amount_value_handle).clone();
-
-    let amount_onchange = {
-        let input_node_ref = amount_node_ref.clone();
-        let amount_value_handle = amount_value_handle.clone();
-
-        Callback::from(move |_| {
-            let input = input_node_ref.cast::<HtmlInputElement>();
-
-            if let Some(input) = input {
-                let input = input.value().parse::<u64>().unwrap();
-                let amount = Amount::from_sat(input);
-
-                amount_value_handle.set(amount);
+            Msg::NewAddr(addr) => {
+                self.view = View::NewAddress(addr);
+                true
             }
-        })
-    };
-
-    let address_node_ref = use_node_ref();
-    let address_value_handle = use_state(|| String::new());
-    let address_value = (*address_value_handle).clone();
-
-    let address_onchange = {
-        let input_node_ref = address_node_ref.clone();
-        let description_value_handle = address_value_handle.clone();
-
-        Callback::from(move |_| {
-            let input = input_node_ref.cast::<HtmlInputElement>();
-
-            if let Some(input) = input {
-                let input = input.value();
-
-                description_value_handle.set(input);
+            Msg::SendView => {
+                self.view = View::Send;
+                true
             }
-        })
-    };
-
-    let state_clone = state.clone();
-    let send = {
-        Callback::from(move |_| {
-            state_clone.set(State::Send);
-        })
-    };
-
-    let txid = use_state(|| String::new());
-
-    let pay = {
-        let amount_value = amount_value.clone();
-        let address_value = address_value.clone();
-
-        let state_clone = state.clone();
-        let txid = txid.clone();
-        Callback::from(move |_| {
-            let pay_request = PayOnChainRequest {
-                sat: amount_value.to_sat(),
-                address: address_value.clone(),
-            };
-            let state_clone = state_clone.clone();
-
-            let txid = txid.clone();
-
-            if let Ok(jwt) = LocalStorage::get::<String>("auth_token") {
-                wasm_bindgen_futures::spawn_local(async move {
-                    let response: String =
-                        Request::post(&format!("http://127.0.0.1:8086/pay-on-chain"))
-                            .header("Authorization", &format!("Bearer {}", jwt))
-                            .json(&pay_request)
-                            .unwrap()
-                            .send()
-                            .await
-                            .unwrap()
-                            .json()
-                            .await
-                            .unwrap();
-                    txid.set(response);
-                    state_clone.set(State::Sent);
-                });
+            Msg::Close => {
+                self.view = View::Transactions;
+                true
             }
-        })
-    };
-    let close = {
-        let on_chain_address = on_chain_address.clone();
-        let state = state.clone();
-        Callback::from(move |_: MouseEvent| {
-            let on_chain_address = on_chain_address.clone();
-            on_chain_address.set(None);
-            state.set(State::Transactions);
+            Msg::Pay => {
+                let callback = ctx.link().callback(Msg::Paid);
+                let jwt = ctx.props().jwt.clone();
 
-            amount_value_handle.set(Amount::ZERO);
-            address_value_handle.set(String::new());
-        })
-    };
+                let mut amount_value = None;
+                let mut address = None;
 
-    let state_clone = state.clone();
-    html! {
-            <>
+                let amount = self.amount_node_ref.cast::<HtmlInputElement>();
 
-        <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
-                <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{ "On Chain" }</h5>
-    {
-        match *state_clone {
-                State::Transactions => {
-                    html!{
-                        <>
-            <button onclick={generate_address} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                 { "Generate Address" }
-             </button>
-
-
-            <button onclick={send} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                 { "Send" }
-             </button>
-
-                        </>
-                    }
+                if let Some(input) = amount {
+                    let input = input.value().parse::<u64>().unwrap();
+                    amount_value = Some(Amount::from_sat(input));
                 }
-                State::Send => {
-                    html!{
-                        <>
-          <div class="relative z-0 w-full mb-6 group">
-                                  <div class="relative z-0 w-full mb-6 group">
-              <label for="description" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Address"}</label>
-              <input type="text" name="description" id="description" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={address_node_ref} value={address_value} onchange={address_onchange} />
+
+                let input = self.address_node_ref.cast::<HtmlInputElement>();
+
+                if let Some(input) = input {
+                    address = Some(input.value());
+                }
+
+                if let (Some(amount), Some(address)) = (amount_value, address) {
+                    let pay_request = PayOnChainRequest {
+                        sat: amount.to_sat(),
+                        address,
+                    };
+
+                    spawn_local(async move {
+                        pay_on_chain(&jwt, pay_request, callback).await.ok();
+                    });
+                }
+
+                false
+            }
+            Msg::Paid(txid) => {
+                self.view = View::Sent(txid);
+                true
+            }
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let generate_address = ctx.link().callback(|_| Msg::FetechNewAddr);
+        let close = ctx.link().callback(|_| Msg::Close);
+        let send = ctx.link().callback(|_| Msg::SendView);
+        let pay = ctx.link().callback(|_| Msg::Pay);
+        html! {
+                <>
+
+            <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
+                    <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{ "On Chain" }</h5>
+        {
+            match &self.view {
+                View::Transactions => {
+                    html! {
+                                <>
+                    <button onclick={generate_address} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                         { "Generate Address" }
+                     </button>
+
+
+                    <button onclick={send} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                         { "Send" }
+                     </button>
+
+                                </>
+                            }
+                }
+                View::NewAddress(address) => {
+                    html! {
+                                    <>
+                        <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
+                            {"Generated Address"}
+                        </h2>
+                        <p class="flex-1 dark:text-gray-400">{address }</p>
+                        <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
+                            <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
+                            // TODO: Copy button
+                            // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
                     </div>
-                <div class="relative z-0 w-full mb-6 group">
-            <label for="push_amount" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Amount (sat)"}</label>
-              <input type="numeric" name="push_amount" id="push_amount" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={amount_node_ref} value={amount_value.to_sat().to_string()} onchange={amount_onchange} />
-                        </div>
-        <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
-            <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={pay}>{"Send"}</button>
-                <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
-        </div>
-        </div>
 
-                        </>
-                    }
+                                    </>
+                                }
                 }
-                State::NewAddress => {
-                    html!{
-                        <>
-            <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
-                {"Generated Address"}
-            </h2>
-                        if on_chain_address.is_some() {
-            <p class="flex-1 dark:text-gray-400">{on_chain_address.as_ref().unwrap() }</p>
-                        }
-            <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
-                <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
-                // TODO: Copy button
-                // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
-        </div>
+                View::Send => {
+                    html! {
+                                    <>
+                      <div class="relative z-0 w-full mb-6 group">
+                                              <div class="relative z-0 w-full mb-6 group">
+                          <label for="description" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Address"}</label>
+                          <input type="text" name="description" id="description" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.address_node_ref.clone()} />
+                                </div>
+                            <div class="relative z-0 w-full mb-6 group">
+                        <label for="push_amount" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Amount (sat)"}</label>
+                          <input type="numeric" name="push_amount" id="push_amount" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.amount_node_ref.clone()} />
+                                    </div>
+                    <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
+                        <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={pay}>{"Send"}</button>
+                            <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
+                    </div>
+                    </div>
 
-                        </>
-                    }
+                                    </>
+                                }
                 }
-                State::Sent => {
-                    html!{
-                    <>
-            <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
-                {"Txid"}
-            </h2>
-            <p class="flex-1 dark:text-gray-400">{ txid.to_string() }</p>
-            <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
-                <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
-                // TODO: Copy button
-                // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
-        </div>
+                View::Sent(txid) => {
+                    html! {
+                                <>
+                        <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
+                            {"Txid"}
+                        </h2>
+                        <p class="flex-1 dark:text-gray-400">{ txid.to_string() }</p>
+                        <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
+                            <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
+                            // TODO: Copy button
+                            // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
+                    </div>
 
-                        </>}
-
+                                    </>}
                 }
             }
         }
-
-    </a>
+            </a>
             </>
             }
+    }
 }
