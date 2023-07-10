@@ -1924,6 +1924,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "mint-manager"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bitcoin 0.30.0",
+ "cashu-crab",
+ "gloo",
+ "gloo-net",
+ "gloo-storage",
+ "js-sys",
+ "jwt-compact",
+ "log",
+ "node-manager-types",
+ "nostr",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-logger",
+ "web-sys",
+ "yew",
+]
+
+[[package]]
 name = "mio"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3390,30 +3414,6 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "trunk-template"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bitcoin 0.30.0",
- "cashu-crab",
- "gloo",
- "gloo-net",
- "gloo-storage",
- "js-sys",
- "jwt-compact",
- "log",
- "node-manager-types",
- "nostr",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-logger",
- "web-sys",
- "yew",
 ]
 
 [[package]]

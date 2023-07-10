@@ -71,6 +71,7 @@ pub enum Msg {
     PayView,
     GenerateInvoice,
     SendPay,
+    InvoiceChange,
     NewInvoice(Invoice),
     Paid(InvoiceStatus),
 }
@@ -148,6 +149,29 @@ impl Component for Ln {
 
                 false
             }
+            Msg::InvoiceChange => {
+                let input = self.pay_input_node_ref.cast::<HtmlInputElement>();
+                if let Some(input) = input {
+                    if let Ok(invoice) = Invoice::from_str(&input.value()) {
+                        let desctiption = match invoice.description() {
+                            cashu_crab::lightning_invoice::InvoiceDescription::Direct(des) => {
+                                des.to_string()
+                            }
+                            cashu_crab::lightning_invoice::InvoiceDescription::Hash(des) => {
+                                "".to_string()
+                            }
+                        };
+                        self.view = View::Send(Some((
+                            Amount::from_msat(invoice.amount_milli_satoshis().unwrap_or(0)),
+                            desctiption,
+                        )));
+
+                        return true;
+                    }
+                }
+
+                false
+            }
             Msg::NewInvoice(invoice) => {
                 self.view = View::NewInvoice(invoice);
                 true
@@ -165,6 +189,8 @@ impl Component for Ln {
         let pay_button = ctx.link().callback(|_| Msg::PayView);
         let generate_invoice = ctx.link().callback(|_| Msg::GenerateInvoice);
         let send_pay = ctx.link().callback(|_| Msg::SendPay);
+
+        let invoice_change = ctx.link().callback(|_| Msg::InvoiceChange);
         html! {
                     <>
 
@@ -206,7 +232,7 @@ impl Component for Ln {
                         <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
                             {"Generated Invoice"}
                         </h2>
-                        <p class="flex-1 dark:text-gray-400">{invoice.to_string() }</p>
+                        <p class="flex-1 dark:text-gray-400" style="max-width: 33vw; word-wrap: break-word;">{invoice.to_string() }</p>
                         <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
                             <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
                             // TODO: Copy button
@@ -223,15 +249,14 @@ impl Component for Ln {
         <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
             {"Pay Invoice"}
         </h2>
-          <input name="pay_invoice" id="pay_invoice" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.pay_input_node_ref.clone()} />
-          <label for="pay_invoice" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Peer Ip"}</label>
+          <input name="pay_invoice" id="pay_invoice" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.pay_input_node_ref.clone()} onchange={invoice_change} />
 
                         if let Some((amount, description)) = info {
+                                <div class="flex">
                                         <p class="font-normal text-gray-700 dark:text-gray-400"> { format!("Description: {}", description ) } </p>
-
-
-                                        <p class="font-normal text-gray-700 dark:text-gray-400"> { format!("Description: {}", amount.to_sat() ) } </p>
-                                }
+                                        <p class="font-normal text-gray-700 dark:text-gray-400" style="margin-left: auto;"> { format!("Amount (sat): {}", amount.to_sat() ) } </p>
+                                </div>
+                            }
 
         <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
             <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={send_pay}>{"Pay"}</button>
