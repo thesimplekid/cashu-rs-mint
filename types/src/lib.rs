@@ -128,6 +128,4 @@ pub struct Bolt11 {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
     pub sub: String,
-    pub iat: u64,
-    pub exp: u64,
 }

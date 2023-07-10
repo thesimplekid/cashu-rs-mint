@@ -9,7 +9,11 @@ use axum::{
     Json,
 };
 use axum_extra::extract::cookie::CookieJar;
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jwt_compact::{
+    alg::{Hs256, Hs256Key},
+    prelude::*,
+    AlgorithmExt,
+};
 use node_manager_types::TokenClaims;
 use nostr::key::XOnlyPublicKey;
 use serde::Serialize;
@@ -26,7 +30,7 @@ pub struct ErrorResponse {
 pub async fn auth<B>(
     cookie_jar: CookieJar,
     State(data): State<Arc<NodeMangerState>>,
-    mut req: Request<B>,
+    req: Request<B>,
     next: Next<B>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     debug!("{:?}", req.headers());
@@ -54,21 +58,31 @@ pub async fn auth<B>(
         (StatusCode::UNAUTHORIZED, Json(json_error))
     })?;
 
-    let claims = decode::<TokenClaims>(
-        &token,
-        &DecodingKey::from_secret(data.settings.ln.jwt_secret.as_ref()),
-        &Validation::default(),
-    )
-    .map_err(|_| {
+    let token = UntrustedToken::new(&token).unwrap();
+
+    let key = Hs256Key::new(data.settings.ln.jwt_secret.clone());
+    let token: Token<TokenClaims> = Hs256.validator(&key).validate(&token).map_err(|_| {
         let json_error = ErrorResponse {
             status: "fail",
-            message: "Invalid token".to_string(),
+            message: "Could not verify token".to_string(),
         };
         (StatusCode::UNAUTHORIZED, Json(json_error))
-    })?
-    .claims;
+    })?;
 
-    let user_pubkey = XOnlyPublicKey::from_str(&claims.sub).map_err(|_| {
+    let time_options = TimeOptions::default();
+
+    token
+        .claims()
+        .validate_expiration(&time_options)
+        .map_err(|_| {
+            let json_error = ErrorResponse {
+                status: "fail",
+                message: "You are not logged in, please provide token".to_string(),
+            };
+            (StatusCode::UNAUTHORIZED, Json(json_error))
+        })?;
+
+    let user_pubkey = XOnlyPublicKey::from_str(&token.claims().custom.sub).map_err(|_| {
         let json_error = ErrorResponse {
             status: "fail",
             message: "Invalid token".to_string(),

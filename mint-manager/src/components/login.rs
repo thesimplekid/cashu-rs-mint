@@ -103,11 +103,11 @@ impl Component for Login {
                         .await
                     {
                         Ok(login_response) => {
-                            let loging: LoginResponse = login_response;
+                            let login: LoginResponse = login_response;
 
-                            LocalStorage::set("auth_token", loging.token.clone()).unwrap();
+                            LocalStorage::set("auth_token", login.token.clone()).unwrap();
 
-                            Msg::LoggedIn(loging.token)
+                            Msg::LoggedIn(login.token)
                         }
                         Err(err) => Msg::Error(err.to_string()),
                     }

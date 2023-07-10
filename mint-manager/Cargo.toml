@@ -28,3 +28,4 @@ js-sys = "0.3.64"
 nostr = { workspace = true }
 gloo-storage = "0.2.2"
 anyhow = "1.0.71"
+jwt-compact = { workspace = true }

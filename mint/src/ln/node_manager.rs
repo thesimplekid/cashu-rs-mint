@@ -10,13 +10,17 @@ use axum::{Json, Router};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use bitcoin::Address;
 use cashu_crab::Amount;
-use jsonwebtoken::{encode, EncodingKey, Header};
+use chrono::Duration;
+use jwt_compact::{
+    alg::{Hs256, Hs256Key},
+    prelude::*,
+};
 use node_manager_types::TokenClaims;
 use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn};
+use tracing::warn;
 
 pub use super::error::Error;
 use super::jwt_auth::auth;
@@ -25,7 +29,6 @@ use super::{cln, greenlight, ldk};
 use crate::config::Settings;
 use crate::database::Db;
 use crate::ln::LnNodeManager;
-use crate::utils::unix_time;
 
 #[derive(Clone)]
 pub enum Nodemanger {
@@ -54,6 +57,11 @@ impl Nodemanger {
         let node_manager_service = Router::new()
             // Auth Routes
             .route("/nostr-login", post(post_nostr_login))
+            .route(
+                "/auth",
+                post(post_check_auth)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
             // Ln Routes
             .route(
                 "/fund",
@@ -276,29 +284,23 @@ async fn post_nostr_login(
 
     event.verify().map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    debug!("Verified");
-
     let authorized_users = state.settings.ln.authorized_users;
 
     if !authorized_users.contains(&event.pubkey) {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let now = unix_time();
-    let iat = unix_time();
-    let exp = now + 3600;
     let claims = TokenClaims {
         sub: event.pubkey.to_string(),
-        exp,
-        iat,
     };
 
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(state.settings.ln.jwt_secret.as_ref()),
-    )
-    .unwrap();
+    let time_options = TimeOptions::default();
+
+    let claims = Claims::new(claims).set_duration_and_issuance(&time_options, Duration::hours(1));
+
+    let key = Hs256Key::new(state.settings.ln.jwt_secret);
+    let header: Header = Header::default();
+    let token: String = Hs256.token(&header, &claims, &key).unwrap();
 
     let cookie = Cookie::build("token", token.to_owned())
         .path("/")
@@ -319,6 +321,10 @@ async fn post_nostr_login(
         .headers_mut()
         .insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
     Ok(response)
+}
+
+async fn post_check_auth() -> Result<StatusCode, StatusCode> {
+    Ok(StatusCode::OK)
 }
 
 async fn post_close_channel(

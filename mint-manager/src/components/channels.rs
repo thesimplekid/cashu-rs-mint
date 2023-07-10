@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use bitcoin::secp256k1::{PublicKey, XOnlyPublicKey};
+use bitcoin::secp256k1::PublicKey;
 use cashu_crab::Amount;
-use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
-use log::{debug, warn};
-use node_manager_types::requests::{self, OpenChannelRequest};
+use log::warn;
+use node_manager_types::requests::OpenChannelRequest;
 use node_manager_types::responses::ChannelInfo;
 use web_sys::HtmlInputElement;
 use yew::platform::spawn_local;
@@ -30,11 +29,6 @@ async fn post_open_channel(
     open_channel_callback.emit("".to_string());
 
     Ok(())
-}
-
-pub enum State {
-    Channels,
-    OpenChannel,
 }
 
 #[derive(PartialEq, Properties)]

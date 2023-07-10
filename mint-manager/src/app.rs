@@ -35,10 +35,26 @@ async fn get_cashu(jwt: &str, fetech_callback: Callback<Amount>) -> Result<()> {
     Ok(())
 }
 
+async fn check_login(jwt: &str, callback: Callback<bool>) -> Result<()> {
+    let response = Request::post("http://127.0.0.1:8086/auth")
+        .header("Authorization", &format!("Bearer {}", jwt))
+        .send()
+        .await?;
+
+    if response.ok() {
+        callback.emit(true);
+    } else {
+        callback.emit(false);
+    }
+
+    Ok(())
+}
+
 pub enum Msg {
     LoggedIn(String),
     FetechedBalances(BalanceResponse),
     FetechedCashu(Amount),
+    CheckedAuth(bool),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -59,9 +75,12 @@ impl Component for App {
             let balance_callback = ctx.link().callback(Msg::FetechedBalances);
             let cashu_callback = ctx.link().callback(Msg::FetechedCashu);
             let jwt_clone = jwt.clone();
+            let check_auth = ctx.link().callback(Msg::CheckedAuth);
             spawn_local(async move {
-                get_balances(&jwt_clone, balance_callback).await.ok();
-                get_cashu(&jwt_clone, cashu_callback).await.ok();
+                if check_login(&jwt_clone, check_auth).await.is_ok() {
+                    get_balances(&jwt_clone, balance_callback).await.ok();
+                    get_cashu(&jwt_clone, cashu_callback).await.ok();
+                }
             });
 
             Some(jwt)
@@ -101,6 +120,14 @@ impl Component for App {
                 self.cashu_in_circulation = amount;
 
                 true
+            }
+            Msg::CheckedAuth(status) => {
+                if !status {
+                    LocalStorage::delete("auth_token");
+                    true
+                } else {
+                    false
+                }
             }
         }
     }
