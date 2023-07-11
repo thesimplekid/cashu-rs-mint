@@ -185,4 +185,6 @@ pub trait LnNodeManager: Send + Sync {
     async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error>;
 
     async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error>;
+
+    async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error>;
 }

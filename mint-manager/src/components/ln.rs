@@ -153,7 +153,7 @@ impl Component for Ln {
                 let input = self.pay_input_node_ref.cast::<HtmlInputElement>();
                 if let Some(input) = input {
                     if let Ok(invoice) = Invoice::from_str(&input.value()) {
-                        let desctiption = match invoice.description() {
+                        let description = match invoice.description() {
                             cashu_crab::lightning_invoice::InvoiceDescription::Direct(des) => {
                                 des.to_string()
                             }
@@ -163,7 +163,7 @@ impl Component for Ln {
                         };
                         self.view = View::Send(Some((
                             Amount::from_msat(invoice.amount_milli_satoshis().unwrap_or(0)),
-                            desctiption,
+                            description,
                         )));
 
                         return true;

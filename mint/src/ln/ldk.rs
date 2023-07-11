@@ -282,6 +282,10 @@ impl LnNodeManager for Ldk {
 
         Ok(String::from_utf8(res.0.to_vec()).unwrap())
     }
+
+    async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
+        todo!()
+    }
 }
 
 fn channel_info_from_details(details: ChannelDetails) -> Result<ChannelInfo, Error> {

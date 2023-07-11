@@ -28,6 +28,13 @@ pub mod requests {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ConnectPeerRequest {
+        pub public_key: PublicKey,
+        pub ip: String,
+        pub port: u16,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PayOnChainRequest {
         pub sat: u64,
         pub address: String,
@@ -85,6 +92,7 @@ pub mod responses {
         pub on_chain_total: Amount,
         pub ln: Amount,
     }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ChannelInfo {
         pub peer_pubkey: PublicKey,
@@ -94,6 +102,13 @@ pub mod responses {
         pub is_usable: bool,
         pub status: ChannelStatus,
     }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct PeerInfo {
+        pub peer_pubkey: PublicKey,
+        pub connected: bool,
+    }
+
     /*
     impl From<ChannelDetails> for ChannelInfo {
         fn from(channel_details: ChannelDetails) -> Self {

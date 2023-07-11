@@ -20,7 +20,7 @@ use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub use super::error::Error;
 use super::jwt_auth::auth;
@@ -67,6 +67,15 @@ impl Nodemanger {
                 "/fund",
                 get(get_funding_address)
                     .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/connect-peer",
+                post(post_connect_peer)
+                    .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
+            )
+            .route(
+                "/peers",
+                get(get_peers).route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
             )
             .route(
                 "/open-channel",
@@ -255,6 +264,16 @@ impl Nodemanger {
         Ok(txid)
     }
 
+    pub async fn peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
+        let peers = match &self {
+            Nodemanger::Ldk(ldk) => ldk.list_peers().await?,
+            Nodemanger::Cln(cln) => cln.list_peers().await?,
+            Nodemanger::Greenlight(_gln) => todo!(),
+        };
+
+        Ok(peers)
+    }
+
     pub async fn close(&self, close_channel_request: requests::CloseChannel) -> Result<(), Error> {
         match &self {
             Nodemanger::Ldk(ldk) => {
@@ -325,6 +344,25 @@ async fn post_nostr_login(
 
 async fn post_check_auth() -> Result<StatusCode, StatusCode> {
     Ok(StatusCode::OK)
+}
+
+async fn post_connect_peer(
+    State(state): State<NodeMangerState>,
+    Json(payload): Json<requests::ConnectPeerRequest>,
+) -> Result<StatusCode, Error> {
+    // TODO: Check if node has sufficient onchain balance
+
+    debug!("{:?}", payload);
+
+    Ok(StatusCode::OK)
+}
+
+async fn get_peers(
+    State(state): State<NodeMangerState>,
+) -> Result<Json<Vec<responses::PeerInfo>>, Error> {
+    let peer_info = state.ln.peers().await?;
+
+    Ok(Json(peer_info))
 }
 
 async fn post_close_channel(

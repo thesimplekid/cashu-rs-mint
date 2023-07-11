@@ -10,7 +10,7 @@ use cashu_crab::mint::Mint;
 use cashu_crab::{types::InvoiceStatus, Amount, Invoice, Sha256};
 use cln_rpc::model::responses::ListfundsOutputsStatus;
 use cln_rpc::model::responses::ListpeerchannelsChannelsState;
-use cln_rpc::model::responses::PayStatus;
+use cln_rpc::model::responses::{ListpeersPeers, PayStatus};
 use cln_rpc::model::ListpeerchannelsChannels;
 use cln_rpc::model::{CloseRequest, FundchannelRequest};
 use cln_rpc::model::{
@@ -525,6 +525,30 @@ impl LnNodeManager for Cln {
 
         Ok(payment_hash.to_string())
     }
+
+    async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListPeers(
+                cln_rpc::model::ListpeersRequest {
+                    id: None,
+                    level: None,
+                },
+            ))
+            .await?;
+
+        let peers = match cln_response {
+            cln_rpc::Response::ListPeers(peers) => {
+                peers.peers.iter().flat_map(from_peer_to_info).collect()
+            }
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+
+        Ok(peers)
+    }
 }
 
 fn from_open_request_to_fund_request(
@@ -558,6 +582,17 @@ fn from_open_request_to_fund_request(
         utxos: None,
         mindepth: None,
         reserve: None,
+    })
+}
+
+fn from_peer_to_info(peer: &ListpeersPeers) -> Result<responses::PeerInfo, Error> {
+    let peer_pubkey = PublicKey::from_str(&peer.id.to_string())?;
+
+    let connected = peer.connected;
+
+    Ok(responses::PeerInfo {
+        peer_pubkey,
+        connected,
     })
 }
 

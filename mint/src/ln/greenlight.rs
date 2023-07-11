@@ -515,6 +515,10 @@ impl LnNodeManager for Greenlight {
 
         Ok(String::from_utf8(response.payment_hash)?)
     }
+
+    async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
+        todo!()
+    }
 }
 
 fn from_list_channels_to_info(
