@@ -7,7 +7,7 @@ use gloo_net::http::Request;
 use log::warn;
 use node_manager_types::requests::OpenChannelRequest;
 use node_manager_types::responses::{self, ChannelInfo};
-use web_sys::{EventTarget, HtmlInputElement};
+use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
@@ -29,6 +29,19 @@ async fn post_open_channel(
     Ok(())
 }
 
+async fn get_peers(jwt: &str, peers_callback: Callback<Vec<responses::PeerInfo>>) -> Result<()> {
+    let peers: Vec<responses::PeerInfo> = Request::get("http://127.0.0.1:8086/peers")
+        .header("Authorization", &format!("Bearer {}", jwt))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    peers_callback.emit(peers);
+
+    Ok(())
+}
+
 #[derive(PartialEq, Properties)]
 pub struct Props {
     pub jwt: String,
@@ -39,25 +52,29 @@ pub struct Props {
 pub enum Msg {
     Submit,
     ChannelOpened(String),
-    Selected(String),
+    FetechedPeers(Vec<responses::PeerInfo>),
 }
 
 #[derive(Default)]
 pub struct OpenChannel {
-    input_node_ref: NodeRef,
     ip_input_node_ref: NodeRef,
     port_input_node_ref: NodeRef,
     amount_input_node_ref: NodeRef,
     push_amount_input_node_ref: NodeRef,
     select_node_ref: NodeRef,
-    selected: Option<PublicKey>,
+    peers: Vec<responses::PeerInfo>,
 }
 
 impl Component for OpenChannel {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        let callback = ctx.link().callback(Msg::FetechedPeers);
+        let jwt = ctx.props().jwt.clone();
+        spawn_local(async move {
+            get_peers(&jwt, callback).await.unwrap();
+        });
         Self::default()
     }
 
@@ -65,10 +82,11 @@ impl Component for OpenChannel {
         match msg {
             Msg::Submit => {
                 log::debug!("{:?}", self.select_node_ref.cast::<HtmlInputElement>());
+
                 let pubkey = self
-                    .input_node_ref
-                    .cast::<HtmlInputElement>()
-                    .map(|i| PublicKey::from_str(&i.value()));
+                    .select_node_ref
+                    .cast::<HtmlSelectElement>()
+                    .map(|p| PublicKey::from_str(&p.value()));
 
                 let ip = self
                     .ip_input_node_ref
@@ -132,8 +150,8 @@ impl Component for OpenChannel {
                 false
             }
             Msg::ChannelOpened(_response) => false,
-            Msg::Selected(sel) => {
-                log::debug! {"sel: {:?}", sel};
+            Msg::FetechedPeers(peers) => {
+                self.peers = peers;
                 true
             }
         }
@@ -142,18 +160,6 @@ impl Component for OpenChannel {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let on_submit = ctx.link().callback(|_| Msg::Submit);
 
-        let onchange = ctx.link().callback(|e: Event| {
-            log::debug!("{:?}", e);
-
-            log::debug!("{:?}", e.current_target().unwrap());
-            // Events can bubble so this listener might catch events from child
-            // elements which are not of type HtmlInputElement
-
-            Msg::Submit
-        });
-
-        let t = vec!["a", "b", "c"];
-        let onselect = ctx.link().callback(|_| Msg::Selected("t".to_string()));
         html! {
 
                 <>
@@ -162,22 +168,20 @@ impl Component for OpenChannel {
             <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"> { "Open Channel" } </h5>
                   <div>
                       <div class="relative z-0 w-full mb-6 group">
-                  <input name="peer_pubkey" id="peer_pubkey" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.input_node_ref.clone()} />
-                  <label for="peer_pubkey" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Peer Pubkey"}</label>
                   </div>
                     </div>
               <div class="relative z-0 w-full mb-6 group">
 
             <select
                 ref={self.select_node_ref.clone()}
-                {onchange}
+            class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer"
             >
-                <option value="" disabled=true selected={self.selected.is_none()}>
+                <option value="" disabled=true>
                     { "Select Peer" }
                 </option>
-                { for t.iter().map(|p| {html!{
-                <option value="" onselect={onselect.clone()}>
-                    { p }
+                { for self.peers.iter().map(|p| {html!{
+                <option value={p.peer_pubkey.to_string()} >
+                    { p.peer_pubkey }
                 </option>
             }
 
@@ -194,7 +198,7 @@ impl Component for OpenChannel {
                   <input type="numeric" name="push_amount" id="push_amount" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.push_amount_input_node_ref.clone()} />
                   <label for="push_amount" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Push Amount"}</label>
             </div>
-                <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={on_submit}>{"Create Invoice"}</button>
+                <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={on_submit}>{"Open Channel"}</button>
                     <button class="px-6 py-2 rounded-sm" onclick={ctx.props().back_callback.clone()}>{"Back"}</button>
         </a>
                 </>
