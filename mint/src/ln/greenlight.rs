@@ -301,7 +301,7 @@ impl LnNodeManager for Greenlight {
 
         let requests::OpenChannelRequest {
             public_key,
-            ip: _,
+            host: _,
             port: _,
             amount,
             push_amount,

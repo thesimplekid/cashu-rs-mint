@@ -588,7 +588,7 @@ fn from_open_request_to_fund_request(
 ) -> Result<FundchannelRequest, Error> {
     let requests::OpenChannelRequest {
         public_key,
-        ip: _,
+        host: _,
         port: _,
         amount,
         push_amount,

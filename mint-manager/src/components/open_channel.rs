@@ -57,7 +57,7 @@ pub enum Msg {
 
 #[derive(Default)]
 pub struct OpenChannel {
-    ip_input_node_ref: NodeRef,
+    host_input_node_ref: NodeRef,
     port_input_node_ref: NodeRef,
     amount_input_node_ref: NodeRef,
     push_amount_input_node_ref: NodeRef,
@@ -88,8 +88,8 @@ impl Component for OpenChannel {
                     .cast::<HtmlSelectElement>()
                     .map(|p| PublicKey::from_str(&p.value()));
 
-                let ip = self
-                    .ip_input_node_ref
+                let host = self
+                    .host_input_node_ref
                     .cast::<HtmlInputElement>()
                     .map(|i| i.value());
 
@@ -116,11 +116,11 @@ impl Component for OpenChannel {
 
                 if let (
                     Some(Ok(public_key)),
-                    Some(ip),
+                    Some(host),
                     Some(Ok(port)),
                     Some(Ok(amount)),
                     Some(Ok(push_amount)),
-                ) = (pubkey, ip, port, amount, push_amount)
+                ) = (pubkey, host, port, amount, push_amount)
                 {
                     let amount = Amount::from_sat(amount);
                     let push_amount = if push_amount > 0 {
@@ -131,7 +131,7 @@ impl Component for OpenChannel {
 
                     let open_channel = OpenChannelRequest {
                         public_key,
-                        ip,
+                        host,
                         port,
                         amount,
                         push_amount,

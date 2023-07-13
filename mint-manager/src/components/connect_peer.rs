@@ -73,7 +73,7 @@ impl Component for ConnectPeer {
                     .cast::<HtmlInputElement>()
                     .map(|i| PublicKey::from_str(&i.value()));
 
-                let ip = self
+                let host = self
                     .ip_input_node_ref
                     .cast::<HtmlInputElement>()
                     .map(|i| i.value());
@@ -83,10 +83,10 @@ impl Component for ConnectPeer {
                     .cast::<HtmlInputElement>()
                     .map(|i| i.value().parse::<u16>());
 
-                if let (Some(Ok(public_key)), Some(ip), Some(Ok(port))) = (pubkey, ip, port) {
+                if let (Some(Ok(public_key)), Some(host), Some(Ok(port))) = (pubkey, host, port) {
                     let connect_request = ConnectPeerRequest {
                         public_key,
-                        ip,
+                        host,
                         port,
                     };
 

@@ -270,13 +270,13 @@ impl Nodemanger {
     ) -> Result<responses::PeerInfo, Error> {
         let requests::ConnectPeerRequest {
             public_key,
-            ip,
+            host,
             port,
         } = connect_request;
         let peer_info = match &self {
-            Nodemanger::Ldk(ldk) => ldk.connect_peer(public_key, ip, port).await?,
-            Nodemanger::Cln(cln) => cln.connect_peer(public_key, ip, port).await?,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Ldk(ldk) => ldk.connect_peer(public_key, host, port).await?,
+            Nodemanger::Cln(cln) => cln.connect_peer(public_key, host, port).await?,
+            Nodemanger::Greenlight(gln) => gln.connect_peer(public_key, host, port).await?,
         };
 
         Ok(peer_info)
@@ -286,7 +286,7 @@ impl Nodemanger {
         let peers = match &self {
             Nodemanger::Ldk(ldk) => ldk.list_peers().await?,
             Nodemanger::Cln(cln) => cln.list_peers().await?,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.list_peers().await?,
         };
 
         Ok(peers)

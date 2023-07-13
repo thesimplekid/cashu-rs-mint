@@ -21,7 +21,7 @@ pub mod requests {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct OpenChannelRequest {
         pub public_key: PublicKey,
-        pub ip: String,
+        pub host: String,
         pub port: u16,
         pub amount: Amount,
         pub push_amount: Option<Amount>,
@@ -30,7 +30,7 @@ pub mod requests {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ConnectPeerRequest {
         pub public_key: PublicKey,
-        pub ip: String,
+        pub host: String,
         pub port: u16,
     }
 

@@ -166,13 +166,13 @@ impl LnNodeManager for Ldk {
     ) -> Result<String, Error> {
         let requests::OpenChannelRequest {
             public_key,
-            ip,
+            host,
             port,
             amount,
             push_amount,
         } = open_channel_request;
 
-        let peer_ip = Ipv4Addr::from_str(&ip)?;
+        let peer_ip = Ipv4Addr::from_str(&host)?;
 
         let peer_addr = SocketAddr::new(std::net::IpAddr::V4(peer_ip), port);
 
