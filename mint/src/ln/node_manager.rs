@@ -20,7 +20,7 @@ use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn};
+use tracing::warn;
 
 pub use super::error::Error;
 use super::jwt_auth::auth;
@@ -264,6 +264,24 @@ impl Nodemanger {
         Ok(txid)
     }
 
+    pub async fn connect_peer(
+        &self,
+        connect_request: requests::ConnectPeerRequest,
+    ) -> Result<responses::PeerInfo, Error> {
+        let requests::ConnectPeerRequest {
+            public_key,
+            ip,
+            port,
+        } = connect_request;
+        let peer_info = match &self {
+            Nodemanger::Ldk(ldk) => ldk.connect_peer(public_key, ip, port).await?,
+            Nodemanger::Cln(cln) => cln.connect_peer(public_key, ip, port).await?,
+            Nodemanger::Greenlight(_gln) => todo!(),
+        };
+
+        Ok(peer_info)
+    }
+
     pub async fn peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
         let peers = match &self {
             Nodemanger::Ldk(ldk) => ldk.list_peers().await?,
@@ -350,10 +368,7 @@ async fn post_connect_peer(
     State(state): State<NodeMangerState>,
     Json(payload): Json<requests::ConnectPeerRequest>,
 ) -> Result<StatusCode, Error> {
-    // TODO: Check if node has sufficient onchain balance
-
-    debug!("{:?}", payload);
-
+    let _res = state.ln.connect_peer(payload).await;
     Ok(StatusCode::OK)
 }
 

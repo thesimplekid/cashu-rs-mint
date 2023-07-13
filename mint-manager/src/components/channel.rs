@@ -68,7 +68,7 @@ impl Component for Channel {
                 let callback = ctx.link().callback(|_| Msg::ChannelClosed);
 
                 spawn_local(async move {
-                    post_close_channel(&jwt, channel_close, callback).await;
+                    let _ = post_close_channel(&jwt, channel_close, callback).await;
                 });
 
                 true
@@ -79,8 +79,8 @@ impl Component for Channel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Props {
-            jwt,
-            channel_id,
+            jwt: _,
+            channel_id: _,
             peer_id,
             local_balance,
             remote_balance,

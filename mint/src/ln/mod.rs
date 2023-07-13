@@ -186,5 +186,12 @@ pub trait LnNodeManager: Send + Sync {
 
     async fn pay_keysend(&self, destination: PublicKey, amount: Amount) -> Result<String, Error>;
 
+    async fn connect_peer(
+        &self,
+        public_key: PublicKey,
+        host: String,
+        port: u16,
+    ) -> Result<responses::PeerInfo, Error>;
+
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error>;
 }

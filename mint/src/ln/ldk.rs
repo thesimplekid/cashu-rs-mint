@@ -2,11 +2,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bitcoin::Address;
+use bitcoin::{secp256k1::PublicKey, Address};
 use bitcoin_hashes::Hash;
 use cashu_crab::Amount;
 use cashu_crab::Sha256;
-use cln_rpc::primitives::PublicKey;
 use ldk_node::bitcoin::Network;
 use ldk_node::io::SqliteStore;
 use ldk_node::lightning_invoice::Invoice;
@@ -254,15 +253,12 @@ impl LnNodeManager for Ldk {
         Ok(res.to_string())
     }
 
-    async fn close(
-        &self,
-        channel_id: String,
-        peer_id: Option<bitcoin::secp256k1::PublicKey>,
-    ) -> Result<(), Error> {
+    async fn close(&self, channel_id: String, peer_id: Option<PublicKey>) -> Result<(), Error> {
         let channel_id: [u8; 32] = channel_id.as_bytes().try_into().unwrap();
         let channel_id = ChannelId(channel_id);
 
-        let peer_id = PublicKey::from_str(&peer_id.unwrap().to_string()).unwrap();
+        let peer_id =
+            cln_rpc::primitives::PublicKey::from_str(&peer_id.unwrap().to_string()).unwrap();
 
         self.node.close_channel(&channel_id, peer_id)?;
 
@@ -274,13 +270,22 @@ impl LnNodeManager for Ldk {
         destination: bitcoin::secp256k1::PublicKey,
         amount: Amount,
     ) -> Result<String, Error> {
-        let pubkey = PublicKey::from_slice(&destination.serialize()).unwrap();
+        let pubkey = cln_rpc::primitives::PublicKey::from_slice(&destination.serialize()).unwrap();
 
         let res = self
             .node
             .send_spontaneous_payment(amount.to_sat(), pubkey)?;
 
         Ok(String::from_utf8(res.0.to_vec()).unwrap())
+    }
+
+    async fn connect_peer(
+        &self,
+        public_key: PublicKey,
+        address: String,
+        port: u16,
+    ) -> Result<responses::PeerInfo, Error> {
+        todo!()
     }
 
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {

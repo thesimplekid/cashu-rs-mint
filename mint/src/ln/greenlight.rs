@@ -516,6 +516,15 @@ impl LnNodeManager for Greenlight {
         Ok(String::from_utf8(response.payment_hash)?)
     }
 
+    async fn connect_peer(
+        &self,
+        public_key: PublicKey,
+        address: String,
+        port: u16,
+    ) -> Result<responses::PeerInfo, Error> {
+        todo!()
+    }
+
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
         todo!()
     }

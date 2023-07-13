@@ -526,6 +526,38 @@ impl LnNodeManager for Cln {
         Ok(payment_hash.to_string())
     }
 
+    async fn connect_peer(
+        &self,
+        public_key: PublicKey,
+        host: String,
+        port: u16,
+    ) -> Result<responses::PeerInfo, Error> {
+        let mut cln_client = self.cln_client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::Connect(cln_rpc::model::ConnectRequest {
+                id: public_key.to_string(),
+                host: Some(host),
+                port: Some(port),
+            }))
+            .await?;
+
+        let _peers = match cln_response {
+            cln_rpc::Response::Connect(connect_response) => connect_response.id,
+            _ => {
+                warn!("CLN returned wrong response kind");
+                return Err(Error::WrongClnResponse);
+            }
+        };
+        debug!("Peer Response: {:?}", _peers);
+
+        let peer_info = responses::PeerInfo {
+            peer_pubkey: public_key,
+            connected: true,
+        };
+
+        Ok(peer_info)
+    }
+
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
         let mut cln_client = self.cln_client.lock().await;
         let cln_response = cln_client
