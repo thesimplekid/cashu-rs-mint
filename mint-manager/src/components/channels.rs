@@ -117,8 +117,9 @@ impl Component for Channels {
                                    html!{ <OpenChannel  jwt={ctx.props().jwt.clone()} peers={self.peers.clone()} back_callback={back}/> }
                                }
                                 View::ConnectPeer => {
+                        let open_channel_cb = ctx.link().callback(|_| Msg::OpenChannelView);
                         let back = ctx.link().callback(|_| Msg::Back);
-                                   html!{ <ConnectPeer  jwt={ctx.props().jwt.clone()} back_callback={back}/> }
+                                   html!{ <ConnectPeer  jwt={ctx.props().jwt.clone()} back_callback={back} {open_channel_cb}/> }
 
                     }
                 }

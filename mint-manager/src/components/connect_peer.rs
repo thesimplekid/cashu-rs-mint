@@ -33,6 +33,7 @@ async fn post_connect_peer(
 pub struct Props {
     pub jwt: String,
     pub back_callback: Callback<MouseEvent>,
+    pub open_channel_cb: Callback<MouseEvent>,
 }
 
 #[derive(Default)]
@@ -153,6 +154,7 @@ impl Component for ConnectPeer {
                 html! {
                             <>
                             <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"> { "Peer Connected" } </h5>
+                                    <button class="px-6 py-2 rounded-sm" onclick={ctx.props().open_channel_cb.clone()}>{"Open Channel"}</button>
                                     <button class="px-6 py-2 rounded-sm" onclick={ctx.props().back_callback.clone()}>{"Back"}</button>
                             </>
                 }
