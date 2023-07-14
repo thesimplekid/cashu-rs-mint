@@ -9,6 +9,7 @@ use cashu_crab::Sha256;
 use ldk_node::bitcoin::Network;
 use ldk_node::io::SqliteStore;
 use ldk_node::lightning_invoice::Invoice;
+use ldk_node::PeerDetails;
 use ldk_node::{Builder, Config};
 use ldk_node::{ChannelDetails, ChannelId, NetAddress};
 use ldk_node::{Event, Node};
@@ -285,11 +286,28 @@ impl LnNodeManager for Ldk {
         address: String,
         port: u16,
     ) -> Result<responses::PeerInfo, Error> {
-        todo!()
+        let net_addr = NetAddress::from_str(&format!("{}:{}", address, port)).unwrap();
+
+        let pubkey = cln_rpc::primitives::PublicKey::from_slice(&public_key.serialize())?;
+        self.node.connect(pubkey, net_addr, true)?;
+
+        let peer_info = responses::PeerInfo {
+            peer_pubkey: public_key,
+            connected: true,
+        };
+
+        Ok(peer_info)
     }
 
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
-        todo!()
+        let peers = self
+            .node
+            .list_peers()
+            .iter()
+            .flat_map(peer_info_from_details)
+            .collect();
+
+        Ok(peers)
     }
 }
 
@@ -310,5 +328,15 @@ fn channel_info_from_details(details: ChannelDetails) -> Result<ChannelInfo, Err
         value: Amount::from_sat(details.channel_value_sats),
         is_usable: details.is_usable,
         status,
+    })
+}
+
+fn peer_info_from_details(details: &PeerDetails) -> Result<responses::PeerInfo, Error> {
+    let peer_pubkey =
+        bitcoin::secp256k1::PublicKey::from_slice(&details.node_id.serialize()).unwrap();
+
+    Ok(responses::PeerInfo {
+        peer_pubkey,
+        connected: details.is_connected,
     })
 }
