@@ -11,12 +11,15 @@ use nostr::event::unsigned::UnsignedEvent;
 use nostr::event::Event;
 use nostr::key::Keys;
 use nostr::secp256k1::XOnlyPublicKey;
+use url::Url;
 use yew::prelude::*;
 
+use crate::app::JWT_KEY;
 use crate::bindings;
 
-#[derive(Properties, PartialEq, Default, Clone)]
+#[derive(Properties, PartialEq, Clone)]
 pub struct Props {
+    pub node_url: Url,
     pub logged_in_callback: Callback<String>,
 }
 
@@ -92,8 +95,9 @@ impl Component for Login {
                 false
             }
             Msg::EventSigned(signed_event) => {
+                let url = ctx.props().node_url.join("nostr-login").unwrap();
                 ctx.link().send_future(async move {
-                    match Request::post("http://127.0.0.1:8086/nostr-login")
+                    match Request::post(url.as_str())
                         .json(&signed_event)
                         .unwrap()
                         .send()
@@ -105,7 +109,7 @@ impl Component for Login {
                         Ok(login_response) => {
                             let login: LoginResponse = login_response;
 
-                            LocalStorage::set("auth_token", login.token.clone()).unwrap();
+                            LocalStorage::set(JWT_KEY, login.token.clone()).unwrap();
 
                             Msg::LoggedIn(login.token)
                         }

@@ -5,25 +5,26 @@ use gloo_net::http::Request;
 use node_manager_types::requests;
 use node_manager_types::ChannelStatus;
 use serde_json::Value;
+use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 async fn post_close_channel(
+    url: &Url,
     jwt: &str,
     close_channel_request: requests::CloseChannel,
     channel_close_cb: Callback<String>,
 ) -> Result<()> {
-    let _fetched_channels: Value = Request::post("http://127.0.0.1:8086/close")
+    let url = url.join("close")?;
+
+    let _: Value = Request::post(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .json(&close_channel_request)
         .unwrap()
         .send()
-        .await
-        .unwrap()
+        .await?
         .json()
-        .await
-        .unwrap();
-    log::debug!("{:?}", _fetched_channels);
+        .await?;
 
     channel_close_cb.emit("OK".to_string());
     Ok(())
@@ -31,6 +32,7 @@ async fn post_close_channel(
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
+    pub url: Url,
     pub jwt: String,
     // pub onedit: Callback<(usize, String)>,
     pub channel_id: String,
@@ -59,6 +61,7 @@ impl Component for Channel {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Delete => {
+                let url = ctx.props().url.clone();
                 let jwt = ctx.props().jwt.clone();
                 let channel_close = requests::CloseChannel {
                     channel_id: ctx.props().channel_id.clone(),
@@ -68,7 +71,7 @@ impl Component for Channel {
                 let callback = ctx.link().callback(|_| Msg::ChannelClosed);
 
                 spawn_local(async move {
-                    let _ = post_close_channel(&jwt, channel_close, callback).await;
+                    let _ = post_close_channel(&url, &jwt, channel_close, callback).await;
                 });
 
                 true
@@ -79,6 +82,7 @@ impl Component for Channel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Props {
+            url: _,
             jwt: _,
             channel_id: _,
             peer_id,

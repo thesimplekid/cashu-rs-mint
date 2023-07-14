@@ -1,6 +1,7 @@
 use anyhow::Result;
 use gloo_net::http::Request;
 use node_manager_types::responses::{self, ChannelInfo};
+use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
@@ -9,8 +10,9 @@ use crate::components::connect_peer::ConnectPeer;
 use super::channel::Channel;
 use super::open_channel::OpenChannel;
 
-#[derive(Properties, PartialEq, Default, Clone)]
+#[derive(Properties, PartialEq, Clone)]
 pub struct Props {
+    pub url: Url,
     pub jwt: String,
 }
 
@@ -46,9 +48,10 @@ impl Component for Channels {
         let peers_callback = ctx.link().callback(Msg::FetechedPeers);
 
         let jwt = ctx.props().jwt.clone();
+        let url = ctx.props().url.clone();
         spawn_local(async move {
-            get_channels(&jwt, channels_callback).await.ok();
-            get_peers(&jwt, peers_callback).await.ok();
+            get_channels(&jwt, &url, channels_callback).await.ok();
+            get_peers(&jwt, &url, peers_callback).await.ok();
         });
 
         Self::default()
@@ -98,7 +101,7 @@ impl Component for Channels {
                                                     let remote_balance = channel.value - channel.balance;
 
                                                        html!{
-                                                           <Channel jwt={ctx.props().jwt.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance} status={channel.status}/>
+                                                           <Channel jwt={ctx.props().jwt.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance} status={channel.status} url={ctx.props().url.clone()}/>
                                                                }}).collect::<Html>()
                                                             }
                                                            <button onclick={open_channel_button} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
@@ -114,12 +117,12 @@ impl Component for Channels {
                                    }
                                View::OpenChannel => {
                         let back = ctx.link().callback(|_| Msg::Back);
-                                   html!{ <OpenChannel  jwt={ctx.props().jwt.clone()} peers={self.peers.clone()} back_callback={back}/> }
+                                   html!{ <OpenChannel  jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} peers={self.peers.clone()} back_callback={back}/> }
                                }
                                 View::ConnectPeer => {
                         let open_channel_cb = ctx.link().callback(|_| Msg::OpenChannelView);
                         let back = ctx.link().callback(|_| Msg::Back);
-                                   html!{ <ConnectPeer  jwt={ctx.props().jwt.clone()} back_callback={back} {open_channel_cb}/> }
+                                   html!{ <ConnectPeer  jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} back_callback={back} {open_channel_cb}/> }
 
                     }
                 }
@@ -131,8 +134,14 @@ impl Component for Channels {
     }
 }
 
-async fn get_channels(jwt: &str, got_channels_cb: Callback<Vec<ChannelInfo>>) -> Result<()> {
-    let fetched_channels: Vec<ChannelInfo> = Request::get("http://127.0.0.1:8086/channels")
+async fn get_channels(
+    jwt: &str,
+    url: &Url,
+    got_channels_cb: Callback<Vec<ChannelInfo>>,
+) -> Result<()> {
+    let url = url.join("channels")?;
+
+    let fetched_channels: Vec<ChannelInfo> = Request::get(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .send()
         .await?
@@ -144,8 +153,13 @@ async fn get_channels(jwt: &str, got_channels_cb: Callback<Vec<ChannelInfo>>) ->
     Ok(())
 }
 
-async fn get_peers(jwt: &str, got_peers_cb: Callback<Vec<responses::PeerInfo>>) -> Result<()> {
-    let fetched_channels: Vec<responses::PeerInfo> = Request::get("http://127.0.0.1:8086/peers")
+async fn get_peers(
+    jwt: &str,
+    url: &Url,
+    got_peers_cb: Callback<Vec<responses::PeerInfo>>,
+) -> Result<()> {
+    let url = url.join("peers")?;
+    let fetched_channels: Vec<responses::PeerInfo> = Request::get(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .send()
         .await?

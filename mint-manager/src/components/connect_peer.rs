@@ -5,16 +5,19 @@ use bitcoin::secp256k1::PublicKey;
 use gloo_net::http::Request;
 use log::warn;
 use node_manager_types::requests::ConnectPeerRequest;
+use url::Url;
 use web_sys::HtmlInputElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 async fn post_connect_peer(
     jwt: &str,
+    url: &Url,
     connect_peer_request: ConnectPeerRequest,
     connect_peer_callback: Callback<Msg>,
 ) -> Result<()> {
-    let res = Request::post("http://127.0.0.1:8086/connect-peer")
+    let url = url.join("connect-peer")?;
+    let res = Request::post(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .json(&connect_peer_request)?
         .send()
@@ -32,6 +35,7 @@ async fn post_connect_peer(
 #[derive(PartialEq, Properties)]
 pub struct Props {
     pub jwt: String,
+    pub url: Url,
     pub back_callback: Callback<MouseEvent>,
     pub open_channel_cb: Callback<MouseEvent>,
 }
@@ -93,9 +97,10 @@ impl Component for ConnectPeer {
 
                     let callback = ctx.link().callback(|_| Msg::PeerConnected);
                     let jwt = ctx.props().jwt.clone();
+                    let url = ctx.props().url.clone();
 
                     spawn_local(async move {
-                        post_connect_peer(&jwt, connect_request, callback)
+                        post_connect_peer(&jwt, &url, connect_request, callback)
                             .await
                             .unwrap();
                     });

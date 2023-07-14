@@ -2,12 +2,14 @@ use anyhow::Result;
 use cashu_crab::Amount;
 use gloo_net::http::Request;
 use node_manager_types::{requests::PayOnChainRequest, responses::FundingAddressResponse};
+use url::Url;
 use web_sys::HtmlInputElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
-async fn get_new_addr(jwt: &str, new_addr_callback: Callback<String>) -> Result<()> {
-    let fetched_channels: FundingAddressResponse = Request::get("http://127.0.0.1:8086/fund")
+async fn get_new_addr(jwt: &str, url: &Url, new_addr_callback: Callback<String>) -> Result<()> {
+    let url = url.join("fund")?;
+    let fetched_channels: FundingAddressResponse = Request::get(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .send()
         .await?
@@ -21,10 +23,12 @@ async fn get_new_addr(jwt: &str, new_addr_callback: Callback<String>) -> Result<
 
 async fn pay_on_chain(
     jwt: &str,
+    url: &Url,
     pay_request: PayOnChainRequest,
     pay_on_chain_callback: Callback<String>,
 ) -> Result<()> {
-    let response: String = Request::post(&format!("http://127.0.0.1:8086/pay-on-chain"))
+    let url = url.join("pay-on-chain")?;
+    let response: String = Request::post(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .json(&pay_request)?
         .send()
@@ -37,9 +41,10 @@ async fn pay_on_chain(
     Ok(())
 }
 
-#[derive(Properties, PartialEq, Default, Clone)]
+#[derive(Properties, PartialEq, Clone)]
 pub struct Props {
     pub jwt: String,
+    pub url: Url,
 }
 
 pub enum Msg {
@@ -80,8 +85,10 @@ impl Component for OnChain {
             Msg::FetechNewAddr => {
                 let callback = ctx.link().callback(Msg::NewAddr);
                 let jwt = ctx.props().jwt.clone();
+
+                let url = ctx.props().url.clone();
                 spawn_local(async move {
-                    get_new_addr(&jwt, callback).await.ok();
+                    get_new_addr(&jwt, &url, callback).await.ok();
                 });
                 false
             }
@@ -100,6 +107,7 @@ impl Component for OnChain {
             Msg::Pay => {
                 let callback = ctx.link().callback(Msg::Paid);
                 let jwt = ctx.props().jwt.clone();
+                let url = ctx.props().url.clone();
 
                 let mut amount_value = None;
                 let mut address = None;
@@ -124,7 +132,7 @@ impl Component for OnChain {
                     };
 
                     spawn_local(async move {
-                        pay_on_chain(&jwt, pay_request, callback).await.ok();
+                        pay_on_chain(&jwt, &url, pay_request, callback).await.ok();
                     });
                 }
 

@@ -6,16 +6,20 @@ use cashu_crab::{Amount, Invoice};
 use gloo_net::http::Request;
 use node_manager_types::Bolt11;
 use serde_json::Value;
+use url::Url;
 use web_sys::HtmlInputElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 async fn post_pay_invoice(
     jwt: &str,
+    url: &Url,
     pay_invoice_request: Bolt11,
     callback: Callback<InvoiceStatus>,
 ) -> Result<()> {
-    let _response: Value = Request::post("http://127.0.0.1:8086/pay-invoice")
+    let url = url.join("pay-invoice")?;
+
+    let _response: Value = Request::post(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .json(&pay_invoice_request)?
         .send()
@@ -31,20 +35,24 @@ async fn post_pay_invoice(
 
 async fn get_invoice(
     jwt: &str,
+    url: &Url,
     amount: Amount,
     description: &str,
     callback: Callback<Invoice>,
 ) -> Result<()> {
-    let invoice: Bolt11 = Request::get(&format!(
-        "http://127.0.0.1:8086/invoice?msat={}&description={}",
+    let mut url = url.join("invoice")?;
+    url.set_query(Some(&format!(
+        "msat={}&description={}",
         amount.to_msat(),
         description
-    ))
-    .header("Authorization", &format!("Bearer {}", jwt))
-    .send()
-    .await?
-    .json()
-    .await?;
+    )));
+
+    let invoice: Bolt11 = Request::get(url.as_str())
+        .header("Authorization", &format!("Bearer {}", jwt))
+        .send()
+        .await?
+        .json()
+        .await?;
 
     callback.emit(invoice.bolt11);
 
@@ -60,8 +68,9 @@ enum View {
     NewInvoice(Invoice),
 }
 
-#[derive(Properties, PartialEq, Default, Clone)]
+#[derive(Properties, PartialEq, Clone)]
 pub struct Props {
+    pub url: Url,
     pub jwt: String,
 }
 
@@ -109,6 +118,7 @@ impl Component for Ln {
             Msg::GenerateInvoice => {
                 let callback = ctx.link().callback(Msg::NewInvoice);
                 let jwt = ctx.props().jwt.clone();
+                let url = ctx.props().url.clone();
                 let mut amount_value = None;
                 let mut description = None;
 
@@ -127,7 +137,9 @@ impl Component for Ln {
 
                 if let (Some(amount), Some(description)) = (amount_value, description) {
                     spawn_local(async move {
-                        get_invoice(&jwt, amount, &description, callback).await.ok();
+                        get_invoice(&jwt, &url, amount, &description, callback)
+                            .await
+                            .ok();
                     });
                 }
                 false
@@ -135,6 +147,7 @@ impl Component for Ln {
             Msg::SendPay => {
                 let input = self.pay_input_node_ref.cast::<HtmlInputElement>();
                 let jwt = ctx.props().jwt.clone();
+                let url = ctx.props().url.clone();
 
                 let callback = ctx.link().callback(Msg::Paid);
 
@@ -143,7 +156,7 @@ impl Component for Ln {
                         bolt11: Invoice::from_str(&input.value()).unwrap(),
                     };
                     spawn_local(async move {
-                        post_pay_invoice(&jwt, bolt11, callback).await.ok();
+                        post_pay_invoice(&jwt, &url, bolt11, callback).await.ok();
                     });
                 }
 
@@ -157,7 +170,7 @@ impl Component for Ln {
                             cashu_crab::lightning_invoice::InvoiceDescription::Direct(des) => {
                                 des.to_string()
                             }
-                            cashu_crab::lightning_invoice::InvoiceDescription::Hash(des) => {
+                            cashu_crab::lightning_invoice::InvoiceDescription::Hash(_des) => {
                                 "".to_string()
                             }
                         };

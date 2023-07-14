@@ -7,16 +7,19 @@ use gloo_net::http::Request;
 use log::warn;
 use node_manager_types::requests::OpenChannelRequest;
 use node_manager_types::responses::{self, ChannelInfo};
+use url::Url;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 async fn post_open_channel(
     jwt: &str,
+    url: &Url,
     open_channel_request: OpenChannelRequest,
     open_channel_callback: Callback<String>,
 ) -> Result<()> {
-    let _fetched_channels: ChannelInfo = Request::post("http://127.0.0.1:8086/open-channel")
+    let url = url.join("open-channel")?;
+    let _fetched_channels: ChannelInfo = Request::post(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .json(&open_channel_request)?
         .send()
@@ -29,8 +32,13 @@ async fn post_open_channel(
     Ok(())
 }
 
-async fn get_peers(jwt: &str, peers_callback: Callback<Vec<responses::PeerInfo>>) -> Result<()> {
-    let peers: Vec<responses::PeerInfo> = Request::get("http://127.0.0.1:8086/peers")
+async fn get_peers(
+    jwt: &str,
+    url: &Url,
+    peers_callback: Callback<Vec<responses::PeerInfo>>,
+) -> Result<()> {
+    let url = url.join("peers")?;
+    let peers: Vec<responses::PeerInfo> = Request::get(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .send()
         .await?
@@ -45,6 +53,7 @@ async fn get_peers(jwt: &str, peers_callback: Callback<Vec<responses::PeerInfo>>
 #[derive(PartialEq, Properties)]
 pub struct Props {
     pub jwt: String,
+    pub url: Url,
     pub peers: Vec<responses::PeerInfo>,
     pub back_callback: Callback<MouseEvent>,
 }
@@ -72,8 +81,9 @@ impl Component for OpenChannel {
     fn create(ctx: &Context<Self>) -> Self {
         let callback = ctx.link().callback(Msg::FetechedPeers);
         let jwt = ctx.props().jwt.clone();
+        let url = ctx.props().url.clone();
         spawn_local(async move {
-            get_peers(&jwt, callback).await.unwrap();
+            get_peers(&jwt, &url, callback).await.unwrap();
         });
         Self::default()
     }
@@ -139,9 +149,12 @@ impl Component for OpenChannel {
 
                     let callback = ctx.link().callback(Msg::ChannelOpened);
                     let jwt = ctx.props().jwt.clone();
+                    let url = ctx.props().url.clone();
 
                     spawn_local(async move {
-                        post_open_channel(&jwt, open_channel, callback).await.ok();
+                        post_open_channel(&jwt, &url, open_channel, callback)
+                            .await
+                            .ok();
                     });
                 } else {
                     warn!("Sommethitng is missing");
