@@ -500,7 +500,7 @@ checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
 [[package]]
 name = "cashu-crab"
 version = "0.3.0"
-source = "git+https://github.com/thesimplekid/cashu-crab?rev=6590ab1412df1e76673eeb548aa007182d2a1b75#6590ab1412df1e76673eeb548aa007182d2a1b75"
+source = "git+https://github.com/thesimplekid/cashu-crab#81bb6307aca4fe1784f1834d28a4d73d62b9e745"
 dependencies = [
  "base64 0.21.2",
  "bitcoin 0.30.0",

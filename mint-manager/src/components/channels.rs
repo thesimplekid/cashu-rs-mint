@@ -86,51 +86,53 @@ impl Component for Channels {
         let connect_peer_button = ctx.link().callback(|_| Msg::ConnectPeerView);
 
         html! {
-           <>
-               <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
-                   <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"> { "Channels" } </h5>
+        <>
+            <a class="block flex-1 p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700">
+                <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white"> { "Channels" } </h5>
 
-                       {
-                       match &self.view {
-                                   View::Channels => {
-                                       html!{
-                                           <>
-                                               {
-                                                    self.channels.iter().map(|channel| {
-
-                                                    let remote_balance = channel.value - channel.balance;
-
-                                                       html!{
-                                                           <Channel jwt={ctx.props().jwt.clone()} channel_id={channel.channel_id.clone()} peer_id= {channel.peer_pubkey} local_balance={channel.balance} {remote_balance} status={channel.status} url={ctx.props().url.clone()}/>
-                                                               }}).collect::<Html>()
-                                                            }
-                                                           <button onclick={open_channel_button} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                                                            { "Open Channel" }
-
-                                                            </button>
-                                                           <button onclick={connect_peer_button} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                                                            { "Connect Peer" }
-
-                                            </button>
-                                            </>
-                                        }
-                                   }
-                               View::OpenChannel => {
-                        let back = ctx.link().callback(|_| Msg::Back);
-                                   html!{ <OpenChannel  jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} peers={self.peers.clone()} back_callback={back}/> }
-                               }
-                                View::ConnectPeer => {
-                        let open_channel_cb = ctx.link().callback(|_| Msg::OpenChannelView);
-                        let back = ctx.link().callback(|_| Msg::Back);
-                                   html!{ <ConnectPeer  jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} back_callback={back} {open_channel_cb}/> }
-
+                {
+                    match &self.view {
+                        View::Channels => {
+                            html!{
+                                <>
+                                    {
+                                        self.channels.iter().map(|channel| {
+                                            let remote_balance = channel.value - channel.balance;
+                                            html!{
+                                                <Channel jwt={ctx.props().jwt.clone()} channel_id={channel.channel_id.clone()} peer_id={channel.peer_pubkey} local_balance={channel.balance} {remote_balance} status={channel.status} url={ctx.props().url.clone()}/>
+                                            }
+                                        }).collect::<Html>()
+                                    }
+                                    <div class="flex space-x-2">
+                                        <button onclick={open_channel_button} class="flex-1 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                                            { "Open Channel" }
+                                        </button>
+                                        <button onclick={connect_peer_button} class="flex-1 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                                            { "Connect Peer" }
+                                        </button>
+                                    </div>
+                                </>
+                            }
+                        }
+                        View::OpenChannel => {
+                            let back = ctx.link().callback(|_| Msg::Back);
+                            html!{
+                                <OpenChannel jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} peers={self.peers.clone()} back_callback={back}/>
+                            }
+                        }
+                        View::ConnectPeer => {
+                            let open_channel_cb = ctx.link().callback(|_| Msg::OpenChannelView);
+                            let back = ctx.link().callback(|_| Msg::Back);
+                            html!{
+                                <ConnectPeer jwt={ctx.props().jwt.clone()} url={ctx.props().url.clone()} back_callback={back} {open_channel_cb}/>
+                            }
+                        }
                     }
                 }
-        }
+            </a>
+        </>
 
-                           </a>
-                                       </>
-                  }
+        }
     }
 }
 

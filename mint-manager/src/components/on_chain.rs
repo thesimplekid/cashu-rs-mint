@@ -159,18 +159,18 @@ impl Component for OnChain {
             match &self.view {
                 View::Transactions => {
                     html! {
-                                <>
-                    <button onclick={generate_address} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                         { "Generate Address" }
-                     </button>
+                        <>
+                        <div class="flex space-x-2">
+                            <button onclick={generate_address} class="flex-1 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                                 { "Generate Address" }
+                            </button>
+                            <button onclick={send} class="flex-1 px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
+                                 { "Send" }
+                             </button>
+                        </div>
 
-
-                    <button onclick={send} class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">
-                         { "Send" }
-                     </button>
-
-                                </>
-                            }
+                        </>
+                    }
                 }
                 View::NewAddress(address) => {
                     html! {
