@@ -16,8 +16,8 @@ license-file = "LICENSE"
 keywords = ["bitcoin", "e-cash", "cashu"]
 
 [workspace.dependencies]
-# cashu-crab = { path = "../../cashu-crab" }
-cashu-crab = { git = "https://github.com/thesimplekid/cashu-crab"}
+# cashu-crab = { path = "../cashu-crab", default-features = false, features = ["mint"] }
+cashu-crab = { git = "https://github.com/thesimplekid/cashu-crab", default-features = false, features = ["mint"] }
 bitcoin = { version = "0.30.0", features = ["no-std"] }
 serde = "1.0.164"
 serde_json = "1.0.96"
