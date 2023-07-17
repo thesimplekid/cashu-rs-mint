@@ -203,7 +203,7 @@ impl Component for OnChain {
                                 <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={pay}>{"Send"}</button>
                                 <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
                             </div>
-                        </>
+                            </>
 
                     }
                 }
@@ -218,7 +218,7 @@ impl Component for OnChain {
                             <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
                             // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
                         </div>
-                    </>
+                        </>
 
                     }
                 }

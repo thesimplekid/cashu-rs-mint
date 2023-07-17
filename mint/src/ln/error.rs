@@ -120,6 +120,12 @@ impl From<hex::FromHexError> for Error {
     }
 }
 
+impl From<std::num::ParseIntError> for Error {
+    fn from(err: std::num::ParseIntError) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     code: u16,

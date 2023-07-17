@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
+use bitcoin::secp256k1::PublicKey;
 use gloo_net::http::Request;
 use node_manager_types::responses::{self, ChannelInfo};
+use serde_json::Value;
 use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
@@ -36,7 +40,7 @@ enum View {
 pub struct Channels {
     view: View,
     channels: Vec<ChannelInfo>,
-    peers: Vec<responses::PeerInfo>,
+    peers: HashMap<PublicKey, responses::PeerInfo>,
 }
 
 impl Component for Channels {
@@ -51,7 +55,7 @@ impl Component for Channels {
         let url = ctx.props().url.clone();
         spawn_local(async move {
             get_channels(&jwt, &url, channels_callback).await.ok();
-            get_peers(&jwt, &url, peers_callback).await.ok();
+            get_peers(&jwt, &url, peers_callback).await.unwrap();
         });
 
         Self::default()
@@ -72,6 +76,10 @@ impl Component for Channels {
                 true
             }
             Msg::FetechedPeers(peers) => {
+                let peers = peers.into_iter().fold(HashMap::new(), |mut acc, x| {
+                    acc.insert(x.peer_pubkey, x);
+                    acc
+                });
                 self.peers = peers;
                 true
             }
@@ -161,14 +169,16 @@ async fn get_peers(
     got_peers_cb: Callback<Vec<responses::PeerInfo>>,
 ) -> Result<()> {
     let url = url.join("peers")?;
-    let fetched_channels: Vec<responses::PeerInfo> = Request::get(url.as_str())
+    let fetched_channels: Value = Request::get(url.as_str())
         .header("Authorization", &format!("Bearer {}", jwt))
         .send()
         .await?
         .json()
         .await?;
 
-    got_peers_cb.emit(fetched_channels);
+    let peers = serde_json::from_value(fetched_channels)?;
+
+    got_peers_cb.emit(peers);
 
     Ok(())
 }

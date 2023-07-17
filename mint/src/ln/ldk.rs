@@ -293,6 +293,8 @@ impl LnNodeManager for Ldk {
 
         let peer_info = responses::PeerInfo {
             peer_pubkey: public_key,
+            host: address,
+            port,
             connected: true,
         };
 
@@ -335,8 +337,12 @@ fn peer_info_from_details(details: &PeerDetails) -> Result<responses::PeerInfo, 
     let peer_pubkey =
         bitcoin::secp256k1::PublicKey::from_slice(&details.node_id.serialize()).unwrap();
 
+    todo!()
+    /*
     Ok(responses::PeerInfo {
         peer_pubkey,
+        host: details.address.0,
         connected: details.is_connected,
     })
+    */
 }

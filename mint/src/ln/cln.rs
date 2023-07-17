@@ -536,7 +536,7 @@ impl LnNodeManager for Cln {
         let cln_response = cln_client
             .call(cln_rpc::Request::Connect(cln_rpc::model::ConnectRequest {
                 id: public_key.to_string(),
-                host: Some(host),
+                host: Some(host.clone()),
                 port: Some(port),
             }))
             .await?;
@@ -552,6 +552,8 @@ impl LnNodeManager for Cln {
 
         let peer_info = responses::PeerInfo {
             peer_pubkey: public_key,
+            host,
+            port,
             connected: true,
         };
 
@@ -622,8 +624,23 @@ fn from_peer_to_info(peer: &ListpeersPeers) -> Result<responses::PeerInfo, Error
 
     let connected = peer.connected;
 
+    debug!("{:?}", peer);
+
+    let remote_addr: Vec<String> = peer
+        .clone()
+        .netaddr
+        .ok_or(Error::Custom("No net address".to_string()))?[0]
+        .split(":")
+        .map(|s| s.to_string())
+        .collect();
+
+    let host = remote_addr[0].to_string();
+    let port = remote_addr[1].parse::<u16>()?;
+
     Ok(responses::PeerInfo {
         peer_pubkey,
+        host,
+        port,
         connected,
     })
 }

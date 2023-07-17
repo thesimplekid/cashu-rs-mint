@@ -2,7 +2,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, AUTHORIZATION, CONTENT_TYPE};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware;
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -53,7 +54,6 @@ impl Nodemanger {
         };
 
         let state_arc = Arc::new(state.clone());
-        // TODO: These should be authed
         let node_manager_service = Router::new()
             // Auth Routes
             .route("/nostr-login", post(post_nostr_login))
@@ -123,7 +123,16 @@ impl Nodemanger {
                 get(in_circulation)
                     .route_layer(middleware::from_fn_with_state(state_arc.clone(), auth)),
             )
-            .layer(CorsLayer::permissive())
+            .layer(
+                CorsLayer::very_permissive()
+                    .allow_credentials(true)
+                    .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap())
+                    .allow_headers([
+                        AUTHORIZATION,
+                        CONTENT_TYPE,
+                        ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                    ]),
+            )
             .with_state(state);
 
         let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;

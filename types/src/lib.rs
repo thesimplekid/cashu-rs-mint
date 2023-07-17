@@ -106,6 +106,8 @@ pub mod responses {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub struct PeerInfo {
         pub peer_pubkey: PublicKey,
+        pub host: String,
+        pub port: u16,
         pub connected: bool,
     }
 
