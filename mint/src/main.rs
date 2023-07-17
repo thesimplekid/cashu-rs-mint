@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use cashu_crab::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
 use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
 use cashu_crab::nuts::*;
 use cashu_crab::{mint::Mint, Sha256};
+use clap::Parser;
 use ln::cln::fee_reserve;
 use ln::greenlight::Greenlight;
 use ln::ldk::Ldk;
@@ -30,11 +32,13 @@ use tracing::{debug, warn};
 use types::KeysetInfo;
 use utils::unix_time;
 
+use crate::cli::CLIArgs;
 use crate::config::LnBackend;
 use crate::database::Db;
 use crate::error::Error;
 use crate::ln::cln::Cln;
 
+mod cli;
 mod config;
 mod database;
 mod error;
@@ -48,9 +52,20 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let settings = config::Settings::new(&Some("./config.toml".to_string()));
+    let args = CLIArgs::parse();
 
-    let db_path = settings.info.clone().db_path;
+    // get config file name from args
+    let config_file_arg = match args.config {
+        Some(c) => c,
+        None => "./config.toml".to_string(),
+    };
+
+    let settings = config::Settings::new(&Some(config_file_arg));
+
+    let db_path = match args.db {
+        Some(path) => PathBuf::from_str(&path)?,
+        None => settings.info.clone().db_path,
+    };
 
     let db = Db::new(db_path).await.unwrap();
 
