@@ -174,7 +174,7 @@ impl Component for OnChain {
                 }
                 View::NewAddress(address) => {
                     html! {
-                                    <>
+                     <>
                         <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
                             {"Generated Address"}
                         </h2>
@@ -185,49 +185,47 @@ impl Component for OnChain {
                             // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
                     </div>
 
-                                    </>
+                    </>
                                 }
                 }
                 View::Send => {
                     html! {
-                                    <>
-                      <div class="relative z-0 w-full mb-6 group">
-                                              <div class="relative z-0 w-full mb-6 group">
-                          <label for="description" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Address"}</label>
-                          <input type="text" name="description" id="description" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.address_node_ref.clone()} />
-                                </div>
+                            <>
                             <div class="relative z-0 w-full mb-6 group">
-                        <label for="push_amount" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Amount (sat)"}</label>
-                          <input type="numeric" name="push_amount" id="push_amount" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.amount_node_ref.clone()} />
-                                    </div>
-                    <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
-                        <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={pay}>{"Send"}</button>
-                            <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
-                    </div>
-                    </div>
+                                <label for="description" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Address"}</label>
+                                <input type="text" name="description" id="description" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.address_node_ref.clone()} />
+                            </div>
+                            <div class="relative z-0 w-full mb-6 group">
+                                <label for="push_amount" class="peer-focus:font-medium absolute text-sm text-gray-500 dark:text-gray-400 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-blue-600 peer-focus:dark:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6">{"Amount (sat)"}</label>
+                                <input type="numeric" name="push_amount" id="push_amount" class="block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 border-gray-300 appearance-none dark:text-white dark:border-gray-600 dark:focus:border-blue-500 focus:outline-none focus:ring-0 focus:border-blue-600 peer" ref={self.amount_node_ref.clone()} />
+                            </div>
+                            <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
+                                <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900" onclick={pay}>{"Send"}</button>
+                                <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
+                            </div>
+                        </>
 
-                                    </>
-                                }
+                    }
                 }
                 View::Sent(txid) => {
                     html! {
-                                <>
+                        <>
                         <h2 class="flex items-center gap-2 text-xl font-semibold leadi tracki">
                             {"Txid"}
                         </h2>
                         <p class="flex-1 dark:text-gray-400">{ txid.to_string() }</p>
                         <div class="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
                             <button class="px-6 py-2 rounded-sm" onclick={close.clone()}>{"Back"}</button>
-                            // TODO: Copy button
                             // <button class="px-6 py-2 rounded-sm shadow-sm dark:bg-violet-400 dark:text-gray-900">{"Copy"}</button>
-                    </div>
+                        </div>
+                    </>
 
-                                    </>}
+                    }
                 }
             }
         }
             </a>
             </>
-            }
+        }
     }
 }
