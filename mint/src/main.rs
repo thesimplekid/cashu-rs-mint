@@ -19,6 +19,7 @@ use cashu_crab::nuts::nut05::{CheckFeesRequest, CheckFeesResponse};
 use cashu_crab::nuts::nut06::{SplitRequest, SplitResponse};
 use cashu_crab::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
 use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
+use cashu_crab::nuts::nut09::MintVersion;
 use cashu_crab::nuts::*;
 use cashu_crab::{mint::Mint, Sha256};
 use clap::Parser;
@@ -31,6 +32,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, warn};
 use types::KeysetInfo;
 use utils::unix_time;
+
+pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 use crate::cli::CLIArgs;
 use crate::config::LnBackend;
@@ -244,8 +247,6 @@ struct MintInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pubkey: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
@@ -263,7 +264,6 @@ impl From<config::MintInfo> for MintInfo {
     fn from(info: config::MintInfo) -> Self {
         Self {
             name: info.name,
-            pubkey: info.pubkey,
             version: info.version,
             description: info.description,
             description_long: info.description_long,
@@ -484,6 +484,44 @@ async fn post_check(
     })?))
 }
 
-async fn get_info(State(state): State<MintState>) -> Result<Json<MintInfo>, Error> {
-    Ok(Json(state.mint_info))
+async fn get_info(State(state): State<MintState>) -> Result<Json<nut09::MintInfo>, Error> {
+    // TODO:
+    let nuts = vec![
+        "NUT-07".to_string(),
+        "NUT-08".to_string(),
+        "NUT-09".to_string(),
+    ];
+
+    let mint_version = MintVersion {
+        name: "cashu-rs-mint".to_string(),
+        version: CARGO_PKG_VERSION
+            .map(std::borrow::ToOwned::to_owned)
+            .unwrap_or("".to_string()),
+    };
+
+    let contact: Vec<Vec<String>> = state
+        .mint_info
+        .contact
+        .iter()
+        .map(|inner_map| {
+            inner_map
+                .iter()
+                .flat_map(|(k, v)| vec![k.clone(), v.clone()])
+                .collect()
+        })
+        .collect();
+
+    let mint_info = nut09::MintInfo {
+        name: state.mint_info.name,
+        // TODO:
+        pubkey: None,
+        version: Some(mint_version),
+        description: state.mint_info.description,
+        description_long: state.mint_info.description_long,
+        contact,
+        nuts,
+        motd: state.mint_info.motd,
+    };
+
+    Ok(Json(mint_info))
 }

@@ -41,7 +41,6 @@ use tracing::{debug, warn};
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MintInfo {
     pub name: Option<String>,
-    pub pubkey: Option<String>,
     pub version: Option<String>,
     pub description: Option<String>,
     pub description_long: Option<String>,
