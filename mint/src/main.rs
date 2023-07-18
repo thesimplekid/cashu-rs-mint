@@ -205,16 +205,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/check", post(post_check))
         .route("/melt", post(post_melt))
         .route("/info", get(get_info))
-        .layer(
-            CorsLayer::very_permissive()
-                .allow_credentials(true)
-                .allow_headers([
-                    AUTHORIZATION,
-                    CONTENT_TYPE,
-                    ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                    ACCESS_CONTROL_ALLOW_ORIGIN,
-                ]),
-        )
+        .layer(CorsLayer::very_permissive().allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+        ]))
         .with_state(state);
 
     let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
