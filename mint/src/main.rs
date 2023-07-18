@@ -111,23 +111,41 @@ async fn main() -> anyhow::Result<()> {
             .ok_or(anyhow!("cln socket not defined"))?;
 
             let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await?);
+
+            let node_manager = match settings.ln.enable_node_manager {
+                true => Some(ln::node_manager::Nodemanger::Cln(cln.clone())),
+                false => None,
+            };
+
             Ln {
                 ln_processor: cln.clone(),
-                node_manager: ln::node_manager::Nodemanger::Cln(cln),
+                node_manager,
             }
         }
         LnBackend::Greenlight => {
             let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await?);
+
+            let node_manager = match settings.ln.enable_node_manager {
+                true => Some(ln::node_manager::Nodemanger::Greenlight(gln.clone())),
+                false => None,
+            };
+
             Ln {
                 ln_processor: gln.clone(),
-                node_manager: ln::node_manager::Nodemanger::Greenlight(gln),
+                node_manager,
             }
         }
         LnBackend::Ldk => {
             let ldk = Arc::new(Ldk::new(&settings, db.clone()).await?);
+
+            let node_manager = match settings.ln.enable_node_manager {
+                true => Some(ln::node_manager::Nodemanger::Ldk(ldk.clone())),
+                false => None,
+            };
+
             Ln {
                 ln_processor: ldk.clone(),
-                node_manager: ln::node_manager::Nodemanger::Ldk(ldk),
+                node_manager,
             }
         }
     };
@@ -147,18 +165,22 @@ async fn main() -> anyhow::Result<()> {
     let settings_clone = settings.clone();
 
     let db_clone = db.clone();
-    tokio::spawn(async move {
-        loop {
-            if let Err(err) = ln_clone
-                .node_manager
-                .start_server(&settings_clone, db_clone.clone())
-                .await
-            {
-                warn!("{:?}", err)
-            }
-        }
-    });
 
+    if settings.ln.enable_node_manager {
+        tokio::spawn(async move {
+            loop {
+                if let Err(err) = ln_clone
+                    .clone()
+                    .node_manager
+                    .unwrap()
+                    .start_server(&settings_clone, db_clone.clone())
+                    .await
+                {
+                    warn!("{:?}", err)
+                }
+            }
+        });
+    }
     let state = MintState {
         db,
         ln,

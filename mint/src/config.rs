@@ -87,6 +87,7 @@ pub enum LnBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
     pub ln_backend: LnBackend,
+    pub enable_node_manager: bool,
     pub authorized_users: HashSet<XOnlyPublicKey>,
     pub jwt_secret: String,
     pub cln_path: Option<PathBuf>,

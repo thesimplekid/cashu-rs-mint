@@ -21,7 +21,7 @@ pub mod node_manager;
 #[derive(Clone)]
 pub struct Ln {
     pub ln_processor: Arc<dyn LnProcessor>,
-    pub node_manager: node_manager::Nodemanger,
+    pub node_manager: Option<node_manager::Nodemanger>,
 }
 
 /// Possible states of an invoice

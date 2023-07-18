@@ -16,6 +16,7 @@ email = "me@example.com"
 [ln]
 cln_path = "~/.lightning/signet/lightning-rpc"
 authorized_users = ["04918dfc36c93e7db6cc0d60f37e1522f1c36b64d3f4b424c532d7c595febbc5"]
+enable_node_manager = false
 jwt_secret = "supersecretprivatekey"
 ln_backend = "Cln"
 fee_percent = 1.0
