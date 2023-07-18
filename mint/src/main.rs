@@ -6,6 +6,9 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use axum::extract::{Query, State};
+use axum::http::header::{
+    ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
+};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -29,6 +32,7 @@ use ln::ldk::Ldk;
 use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tower_http::cors::CorsLayer;
 use tracing::{debug, warn};
 use types::KeysetInfo;
 use utils::unix_time;
@@ -201,6 +205,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/check", post(post_check))
         .route("/melt", post(post_melt))
         .route("/info", get(get_info))
+        .layer(
+            CorsLayer::very_permissive()
+                .allow_credentials(true)
+                .allow_headers([
+                    AUTHORIZATION,
+                    CONTENT_TYPE,
+                    ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                    ACCESS_CONTROL_ALLOW_ORIGIN,
+                ]),
+        )
         .with_state(state);
 
     let ip = Ipv4Addr::from_str(&settings.info.listen_host)?;
