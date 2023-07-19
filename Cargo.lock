@@ -713,7 +713,7 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 [[package]]
 name = "cln-grpc"
 version = "0.1.3"
-source = "git+https://github.com/ElementsProject/lightning.git?branch=master#212c4dba76d291a9cf1513aef639226264a2a581"
+source = "git+https://github.com/ElementsProject/lightning.git?branch=master#e5d0d6958c85470163cd2ac5f198c62ac365b8cf"
 dependencies = [
  "anyhow",
  "bitcoin 0.29.2",
@@ -1224,7 +1224,7 @@ checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 [[package]]
 name = "gl-client"
 version = "0.1.9"
-source = "git+ssh://git@github.com/Blockstream/greenlight#2eabad561ef8d0c42b3bf190a94c9fd9ae303eb6"
+source = "git+ssh://git@github.com/Blockstream/greenlight#99424f36073433803bfafe33c7920e3568c3b9a7"
 dependencies = [
  "anyhow",
  "base64 0.21.2",
