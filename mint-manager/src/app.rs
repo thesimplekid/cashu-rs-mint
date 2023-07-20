@@ -102,8 +102,8 @@ impl Component for App {
     fn create(ctx: &Context<Self>) -> Self {
         let node_url: Option<Url> = LocalStorage::get::<String>(NODE_URL_KEY)
             .ok()
-            .map(|u| Url::from_str(&u).ok())
-            .flatten();
+            .and_then(|u| Url::from_str(&u).ok());
+
         let jwt = LocalStorage::get::<String>(JWT_KEY);
 
         debug!("node: {:?}", node_url);

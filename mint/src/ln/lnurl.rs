@@ -52,7 +52,7 @@ pub struct AuthTokenResponse {
 }
 
 impl LnUrl {
-    pub fn new_auth_lnurl(url: Url, tag: Action, action: Action) -> Self {
+    pub fn _new_auth_lnurl(url: Url, tag: Action, action: Action) -> Self {
         let mut rng = rand::thread_rng();
         let random_bytes: [u8; 32] = rng.gen();
 
@@ -74,7 +74,7 @@ impl LnUrl {
         bech32::encode("lnurl", base32, Variant::Bech32).unwrap()
     }
 
-    pub fn decode(lnurl: String) -> Result<LnUrl, Error> {
+    pub fn _decode(lnurl: String) -> Result<LnUrl, Error> {
         LnUrl::from_str(&lnurl)
     }
 }
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn new_lnurl_test() {
         let service = url::Url::from_str("https://service.com").unwrap();
-        let lnurl = LnUrl::new_auth_lnurl(service, Action::Login, Action::Login);
+        let lnurl = LnUrl::_new_auth_lnurl(service, Action::Login, Action::Login);
 
         println!("{}", lnurl.encode());
 

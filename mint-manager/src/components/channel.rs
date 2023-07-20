@@ -65,7 +65,7 @@ impl Component for Channel {
                 let jwt = ctx.props().jwt.clone();
                 let channel_close = requests::CloseChannel {
                     channel_id: ctx.props().channel_id.clone(),
-                    peer_id: ctx.props().peer_id.clone(),
+                    peer_id: ctx.props().peer_id,
                 };
 
                 let callback = ctx.link().callback(|_| Msg::ChannelClosed);

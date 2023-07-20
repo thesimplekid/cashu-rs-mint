@@ -630,7 +630,7 @@ fn from_peer_to_info(peer: &ListpeersPeers) -> Result<responses::PeerInfo, Error
         .clone()
         .netaddr
         .ok_or(Error::Custom("No net address".to_string()))?[0]
-        .split(":")
+        .split(':')
         .map(|s| s.to_string())
         .collect();
 

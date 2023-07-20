@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             Ln {
-                ln_processor: cln.clone(),
+                ln_processor: cln,
                 node_manager,
             }
         }
@@ -138,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             Ln {
-                ln_processor: gln.clone(),
+                ln_processor: gln,
                 node_manager,
             }
         }
@@ -151,7 +151,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             Ln {
-                ln_processor: ldk.clone(),
+                ln_processor: ldk,
                 node_manager,
             }
         }
