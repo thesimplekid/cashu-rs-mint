@@ -163,7 +163,12 @@ impl Nodemanger {
                     address: address.to_string(),
                 })
             }
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => {
+                let address = gln.new_onchain_address().await.unwrap();
+                Ok(responses::FundingAddressResponse {
+                    address: address.to_string(),
+                })
+            }
         }
     }
 
@@ -203,7 +208,7 @@ impl Nodemanger {
         match &self {
             Nodemanger::Ldk(ldk) => ldk.get_balance().await,
             Nodemanger::Cln(cln) => cln.get_balance().await,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.get_balance().await,
         }
     }
 
@@ -214,7 +219,7 @@ impl Nodemanger {
         match &self {
             Nodemanger::Ldk(ldk) => ldk.pay_invoice(bolt11).await,
             Nodemanger::Cln(cln) => cln.pay_invoice(bolt11).await,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.pay_invoice(bolt11).await,
         }
     }
 
@@ -227,7 +232,7 @@ impl Nodemanger {
         match &self {
             Nodemanger::Ldk(ldk) => ldk.pay_keysend(keysend_request.pubkey, amount).await,
             Nodemanger::Cln(cln) => cln.pay_keysend(keysend_request.pubkey, amount).await,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.pay_keysend(keysend_request.pubkey, amount).await,
         }
     }
 
@@ -250,7 +255,7 @@ impl Nodemanger {
         let invoice = match &self {
             Nodemanger::Ldk(ldk) => ldk.create_invoice(amount, description).await?,
             Nodemanger::Cln(cln) => cln.create_invoice(amount, description).await?,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.create_invoice(amount, description).await?,
         };
 
         Ok(Bolt11 { bolt11: invoice })
@@ -267,7 +272,7 @@ impl Nodemanger {
         let txid = match &self {
             Nodemanger::Ldk(ldk) => ldk.pay_on_chain(address, amount).await?,
             Nodemanger::Cln(cln) => cln.pay_on_chain(address, amount).await?,
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => gln.pay_on_chain(address, amount).await?,
         };
 
         Ok(txid)
@@ -317,7 +322,13 @@ impl Nodemanger {
                 )
                 .await
             }
-            Nodemanger::Greenlight(_gln) => todo!(),
+            Nodemanger::Greenlight(gln) => {
+                gln.close(
+                    close_channel_request.channel_id,
+                    close_channel_request.peer_id,
+                )
+                .await
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ pub enum Error {
     Custom(String),
     TonicError(String),
     InvalidLnUrl,
+    IoError(std::io::Error),
 }
 
 impl std::error::Error for Error {}
@@ -24,9 +25,16 @@ impl fmt::Display for Error {
             Self::Serde(code) => write!(f, "{}", code),
             Self::WrongClnResponse => write!(f, "Cln returned the wrong response"),
             Self::Custom(code) => write!(f, "{}", code),
+            Self::IoError(err) => write!(f, "Io Error {:?}", err),
             Self::TonicError(code) => write!(f, "{}", code),
             Self::InvalidLnUrl => write!(f, "LnUrl is invalid"),
         }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::IoError(err)
     }
 }
 
@@ -157,6 +165,7 @@ impl IntoResponse for Error {
             // Keeping it for now to make debugging easier
             Self::Custom(code) => (StatusCode::INTERNAL_SERVER_ERROR, code).into_response(),
             Self::TonicError(_code) => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
+            Error::IoError(err) => (StatusCode::BAD_REQUEST, "").into_response(),
             Self::InvalidLnUrl => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
         }
     }

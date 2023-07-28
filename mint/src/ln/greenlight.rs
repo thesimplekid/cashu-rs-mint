@@ -1,3 +1,4 @@
+use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ use gl_client::pb::cln::pay_response::PayStatus;
 use gl_client::scheduler::Scheduler;
 use gl_client::signer::model::cln::amount_or_any::Value as SignerValue;
 use gl_client::signer::model::cln::Amount as SignerAmount;
+use gl_client::signer::model::cln::GetinfoRequest;
 use gl_client::signer::model::cln::ListpeerchannelsRequest;
 use gl_client::signer::model::greenlight::cln::InvoiceResponse;
 use gl_client::signer::Signer;
@@ -29,6 +31,7 @@ use tokio::sync::Mutex;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::config::Settings;
 use crate::database::Db;
 use crate::utils::unix_time;
 
@@ -45,12 +48,25 @@ pub struct Greenlight {
 }
 
 impl Greenlight {
-    pub async fn new(db: Db, mint: Arc<Mutex<Mint>>) -> Result<Self, Error> {
+    pub async fn new(db: Db, settings: &Settings, mint: Arc<Mutex<Mint>>) -> Result<Self, Error> {
+        let network = Network::Testnet;
+
         let mut rng = rand::thread_rng();
-        let m = Mnemonic::generate_in_with(&mut rng, Language::English, 24)?;
+
+        let m = match fs::metadata("seed") {
+            Ok(_) => {
+                // FIXME:
+                let seed = fs::read_to_string("seed")?;
+                Mnemonic::from_str(&seed)?
+            }
+            Err(_) => Mnemonic::generate_in_with(&mut rng, Language::English, 24)?,
+        };
+
         let phrase = m.word_iter().fold("".to_string(), |c, n| c + " " + n);
 
-        // Prompt user to safely store the phrase
+        // Prompt uoer to safely store the phrase
+        // FIXME: don't just log real seeds
+        tracing::info!("Seed Phrase: {:?}", phrase);
 
         let seed = m.to_seed("");
 
@@ -58,24 +74,45 @@ impl Greenlight {
 
         let secret = seed[0..32].to_vec();
 
-        let signer = Signer::new(secret.clone(), Network::Bitcoin, tls)?;
+        let signer = Signer::new(secret.clone(), network, tls)?;
 
-        let scheduler = Scheduler::new(signer.node_id(), Network::Bitcoin).await?;
+        let scheduler = Scheduler::new(signer.node_id(), network).await?;
 
-        // Passing in the signer is required because the client needs to prove
-        // ownership of the `node_id`
-        let res = scheduler.register(&signer, Some("".to_string())).await?;
+        let (device_cert, device_key) =
+            match (fs::metadata("device_cert"), fs::metadata("device_key")) {
+                (Ok(_), Ok(_)) => (
+                    fs::read_to_string("device_cert")?,
+                    fs::read_to_string("device_key")?,
+                ),
+                _ => {
+                    // Passing in the signer is required because the client needs to prove
+                    // ownership of the `node_id`
+                    let res = scheduler
+                        .register(&signer, settings.ln.greenlight_invite_code.clone())
+                        .await?;
+                    let device_cert = res.device_cert;
+                    let device_key = res.device_key;
+
+                    fs::write("device_cert", &device_cert)?;
+                    fs::write("device_key", &device_key)?;
+
+                    (device_cert, device_key)
+                }
+            };
+
+        tracing::info!("cert {:?}", device_cert);
+        tracing::info!("key {:?}", device_key);
 
         let tls = TlsConfig::new()?.identity(
-            res.device_cert.as_bytes().to_vec(),
-            res.device_key.as_bytes().to_vec(),
+            device_cert.as_bytes().to_vec(),
+            device_key.as_bytes().to_vec(),
         );
 
         // Use the configured `tls` instance when creating `Scheduler` and `Signer`
         // instance going forward
-        let signer = Signer::new(secret, Network::Bitcoin, tls.clone())?;
-        let scheduler =
-            Scheduler::with(signer.node_id(), Network::Bitcoin, "uri".to_string(), &tls).await?;
+        let signer = Signer::new(secret, network, tls.clone())?;
+
+        let scheduler = Scheduler::new(signer.node_id(), network).await?;
         let (tx, rx) = tokio::sync::mpsc::channel(1);
 
         let signer_clone = signer.clone();
@@ -85,9 +122,73 @@ impl Greenlight {
             }
         });
 
-        let node: gl_client::node::ClnClient = scheduler.schedule(tls).await?;
-        let node = Arc::new(Mutex::new(node));
+        let mut node: gl_client::node::ClnClient = scheduler.schedule(tls).await?;
+        let info = node
+            .getinfo(GetinfoRequest::default())
+            .await
+            .map_err(|x| Error::TonicError(x.to_string()))?;
+        tracing::warn!("Info {:?}", info);
 
+        let node = Arc::new(Mutex::new(node));
+        tracing::warn!("Node up");
+        Ok(Self {
+            signer,
+            signer_tx: tx,
+            node,
+            db,
+            mint,
+        })
+    }
+
+    pub async fn recover(
+        seed_phrase: &str,
+        db: Db,
+        settings: &Settings,
+        mint: Arc<Mutex<Mint>>,
+    ) -> Result<Self, Error> {
+        let network = Network::Testnet;
+        let m = Mnemonic::parse(seed_phrase)?;
+        let tls = TlsConfig::new()?;
+
+        let seed = m.to_seed("");
+        let secret = seed[0..32].to_vec();
+        let signer = Signer::new(secret.clone(), network, tls)?;
+
+        let scheduler = Scheduler::new(signer.node_id(), network).await?;
+
+        let recover = scheduler.recover(&signer).await?;
+
+        let device_cert = recover.device_cert;
+        let device_key = recover.device_key;
+
+        fs::write("device_cert", &device_cert)?;
+        fs::write("device_key", &device_key)?;
+
+        let tls = TlsConfig::new()?.identity(
+            device_cert.as_bytes().to_vec(),
+            device_key.as_bytes().to_vec(),
+        );
+
+        let signer = Signer::new(secret, network, tls.clone())?;
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+
+        let signer_clone = signer.clone();
+        tokio::spawn(async move {
+            if let Err(err) = signer_clone.run_forever(rx).await {
+                debug!("{:?}", err);
+            }
+        });
+
+        let mut node: gl_client::node::ClnClient = scheduler.schedule(tls).await?;
+        let info = node
+            .getinfo(GetinfoRequest::default())
+            .await
+            .map_err(|x| Error::TonicError(x.to_string()))?;
+
+        tracing::warn!("Info {:?}", info);
+
+        let node = Arc::new(Mutex::new(node));
+        tracing::warn!("Node up");
         Ok(Self {
             signer,
             signer_tx: tx,

@@ -17,4 +17,6 @@ pub struct CLIArgs {
         required = false
     )]
     pub config: Option<String>,
+    #[arg(short, long, help = "Recover Greenlight from seed", required = false)]
+    pub recover: Option<String>,
 }

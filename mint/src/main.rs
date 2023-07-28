@@ -130,7 +130,14 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         LnBackend::Greenlight => {
-            let gln = Arc::new(Greenlight::new(db.clone(), mint.clone()).await?);
+            // Greenlight::recover().await.unwrap();
+
+            let gln = match args.recover {
+                Some(seed) => {
+                    Arc::new(Greenlight::recover(&seed, db.clone(), &settings, mint.clone()).await?)
+                }
+                None => Arc::new(Greenlight::new(db.clone(), &settings, mint.clone()).await?),
+            };
 
             let node_manager = match settings.ln.enable_node_manager {
                 true => Some(ln::node_manager::Nodemanger::Greenlight(gln.clone())),
@@ -158,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let ln_clone = ln.clone();
+
     tokio::spawn(async move {
         loop {
             if let Err(err) = ln_clone.ln_processor.wait_invoice().await {

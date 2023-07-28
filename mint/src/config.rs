@@ -90,7 +90,7 @@ pub struct Ln {
     pub authorized_users: HashSet<XOnlyPublicKey>,
     pub jwt_secret: String,
     pub cln_path: Option<PathBuf>,
-    pub geenlight_invoice_code: Option<String>,
+    pub greenlight_invite_code: Option<String>,
     pub invoice_description: Option<String>,
     pub fee_percent: f64,
     pub reserve_fee_min: Amount,
@@ -144,7 +144,7 @@ impl Settings {
 
         match settings.ln.ln_backend {
             LnBackend::Cln => assert!(settings.ln.cln_path.is_some()),
-            LnBackend::Greenlight => assert!(settings.ln.geenlight_invoice_code.is_some()),
+            LnBackend::Greenlight => assert!(settings.ln.greenlight_invite_code.is_some()),
             LnBackend::Ldk => (),
         }
 

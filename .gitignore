@@ -1,4 +1,6 @@
 /target
-myseed
+seed
 *.redb
+device_cert
+device_key
 TODO.md
