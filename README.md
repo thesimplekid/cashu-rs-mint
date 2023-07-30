@@ -22,8 +22,8 @@ WIP
 
 ## Implemented Lightning Backends
 - :heavy_check_mark: [CLNrpc](https://github.com/ElementsProject/lightning#using-the-json-rpc-interface)
-- :white_check_mark: [Greenlight](https://github.com/Blockstream/greenlight)
-- :white_check_mark: [ldk-node](https://github.com/lightningdevkit/ldk-node)
+- :construction: [Greenlight](https://github.com/Blockstream/greenlight)
+- :construction: [ldk-node](https://github.com/lightningdevkit/ldk-node)
  
 ## License
 
