@@ -646,8 +646,45 @@ impl LnNodeManager for Greenlight {
     }
 
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {
-        todo!()
+        let mut node = self.node.lock().await;
+
+        let response = node
+            .list_peers(cln::ListpeersRequest {
+                ..Default::default()
+            })
+            .await
+            .map_err(|err| Error::TonicError(err.to_string()))?
+            .into_inner();
+
+        let peers = response.peers.iter().flat_map(from_peer_to_info).collect();
+
+        Ok(peers)
     }
+}
+
+fn from_peer_to_info(peer: &cln::ListpeersPeers) -> Result<responses::PeerInfo, Error> {
+    let peer_pubkey = PublicKey::from_slice(&peer.id)?;
+
+    let connected = peer.connected;
+
+    debug!("{:?}", peer);
+
+    debug!("net addr: {:?}", peer.netaddr);
+
+    let remote_addr: Vec<String> = peer.clone().netaddr[0]
+        .split(':')
+        .map(|s| s.to_string())
+        .collect();
+
+    let host = remote_addr[0].to_string();
+    let port = remote_addr[1].parse::<u16>()?;
+
+    Ok(responses::PeerInfo {
+        peer_pubkey,
+        host,
+        port,
+        connected,
+    })
 }
 
 fn from_list_channels_to_info(
