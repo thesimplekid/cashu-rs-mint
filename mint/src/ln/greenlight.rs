@@ -620,10 +620,29 @@ impl LnNodeManager for Greenlight {
     async fn connect_peer(
         &self,
         public_key: PublicKey,
-        address: String,
+        host: String,
         port: u16,
     ) -> Result<responses::PeerInfo, Error> {
-        todo!()
+        let mut node = self.node.lock().await;
+
+        let _response = node
+            .connect_peer(cln::ConnectRequest {
+                id: public_key.to_string(),
+                host: Some(host.clone()),
+                port: Some(port.into()),
+            })
+            .await
+            .map_err(|err| Error::TonicError(err.to_string()))?
+            .into_inner();
+
+        let peer_info = responses::PeerInfo {
+            peer_pubkey: public_key,
+            host,
+            port,
+            connected: true,
+        };
+
+        Ok(peer_info)
     }
 
     async fn list_peers(&self) -> Result<Vec<responses::PeerInfo>, Error> {

@@ -144,7 +144,7 @@ impl Settings {
 
         match settings.ln.ln_backend {
             LnBackend::Cln => assert!(settings.ln.cln_path.is_some()),
-            LnBackend::Greenlight => assert!(settings.ln.greenlight_invite_code.is_some()),
+            LnBackend::Greenlight => (),
             LnBackend::Ldk => (),
         }
 
