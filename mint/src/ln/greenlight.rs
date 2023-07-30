@@ -29,6 +29,7 @@ use node_manager_types::ChannelStatus;
 use node_manager_types::{requests, responses, Bolt11};
 use tokio::sync::Mutex;
 use tracing::debug;
+use tracing::log::warn;
 use uuid::Uuid;
 
 use crate::config::Settings;
@@ -442,10 +443,12 @@ impl LnNodeManager for Greenlight {
             .map_err(|err| Error::TonicError(err.to_string()))?
             .into_inner();
 
+        warn!("{:?}", channels_response);
+
         let channels = channels_response
             .channels
             .into_iter()
-            .flat_map(from_list_channels_to_info)
+            .map(|x| from_list_channels_to_info(x).unwrap())
             .collect();
 
         Ok(channels)
@@ -653,23 +656,24 @@ impl LnNodeManager for Greenlight {
                 ..Default::default()
             })
             .await
-            .map_err(|err| Error::TonicError(err.to_string()))?
+            .map_err(|err| Error::TonicError(err.to_string()))
+            .unwrap()
             .into_inner();
 
-        let peers = response.peers.iter().flat_map(from_peer_to_info).collect();
+        let peers = response
+            .peers
+            .iter()
+            .map(|x| from_peer_to_info(x).unwrap())
+            .collect();
 
         Ok(peers)
     }
 }
 
 fn from_peer_to_info(peer: &cln::ListpeersPeers) -> Result<responses::PeerInfo, Error> {
-    let peer_pubkey = PublicKey::from_slice(&peer.id)?;
+    let peer_pubkey = PublicKey::from_slice(&peer.id).unwrap();
 
     let connected = peer.connected;
-
-    debug!("{:?}", peer);
-
-    debug!("net addr: {:?}", peer.netaddr);
 
     let remote_addr: Vec<String> = peer.clone().netaddr[0]
         .split(':')
@@ -677,7 +681,7 @@ fn from_peer_to_info(peer: &cln::ListpeersPeers) -> Result<responses::PeerInfo, 
         .collect();
 
     let host = remote_addr[0].to_string();
-    let port = remote_addr[1].parse::<u16>()?;
+    let port = remote_addr[1].parse::<u16>().unwrap();
 
     Ok(responses::PeerInfo {
         peer_pubkey,
@@ -699,7 +703,7 @@ fn from_list_channels_to_info(
         )
     });
 
-    let local_balance = list_channel.funding.map_or(Amount::ZERO, |a| {
+    let local_balance = list_channel.clone().funding.map_or(Amount::ZERO, |a| {
         Amount::from_msat(a.local_funds_msat.unwrap_or(SignerAmount { msat: 0 }).msat)
     });
 
@@ -718,14 +722,11 @@ fn from_list_channels_to_info(
     Ok(responses::ChannelInfo {
         peer_pubkey: PublicKey::from_slice(
             &list_channel
+                .clone()
                 .peer_id
                 .ok_or(Error::Custom("No peer id".to_string()))?,
         )?,
-        channel_id: String::from_utf8(
-            list_channel
-                .channel_id
-                .ok_or(Error::Custom("No Channel Id".to_string()))?,
-        )?,
+        channel_id: hex::encode(list_channel.clone().channel_id()),
         balance: local_balance,
         value: local_balance + remote_balance,
         is_usable,

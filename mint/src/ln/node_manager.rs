@@ -21,7 +21,7 @@ use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub use super::error::Error;
 use super::jwt_auth::auth;
@@ -179,29 +179,27 @@ impl Nodemanger {
         match &self {
             Nodemanger::Ldk(ldk) => {
                 ldk.open_channel(open_channel_request).await?;
-                Ok(StatusCode::OK)
             }
             Nodemanger::Cln(cln) => {
                 cln.open_channel(open_channel_request).await?;
-                Ok(StatusCode::OK)
             }
-            Nodemanger::Greenlight(_gln) => todo!(),
-        }
+            Nodemanger::Greenlight(gln) => {
+                gln.open_channel(open_channel_request).await?;
+            }
+        };
+        Ok(StatusCode::OK)
     }
 
     pub async fn list_channels(&self) -> Result<Vec<responses::ChannelInfo>, Error> {
-        match &self {
-            Nodemanger::Ldk(ldk) => {
-                let channel_info = ldk.list_channels().await?;
-                Ok(channel_info)
-            }
-            Nodemanger::Cln(cln) => {
-                let channels = cln.list_channels().await?;
+        let channels = match &self {
+            Nodemanger::Ldk(ldk) => ldk.list_channels().await?,
+            Nodemanger::Cln(cln) => cln.list_channels().await?,
+            Nodemanger::Greenlight(gln) => gln.list_channels().await?,
+        };
 
-                Ok(channels)
-            }
-            Nodemanger::Greenlight(_gln) => todo!(),
-        }
+        warn!("Channels: {:?}", channels);
+
+        Ok(channels)
     }
 
     pub async fn get_balance(&self) -> Result<responses::BalanceResponse, Error> {
