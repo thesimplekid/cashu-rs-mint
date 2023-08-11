@@ -2,9 +2,8 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use cashu_crab::Amount;
-use gloo::storage::LocalStorage;
+use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
-use gloo_storage::Storage;
 use log::debug;
 use node_manager_types::responses::BalanceResponse;
 use url::Url;

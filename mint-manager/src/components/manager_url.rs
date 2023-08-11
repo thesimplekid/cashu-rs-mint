@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
-use gloo_storage::LocalStorage;
-use gloo_storage::Storage;
+use gloo::storage::{LocalStorage, Storage};
 use log::warn;
 use url::Url;
 use web_sys::HtmlInputElement;

@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
-use gloo::storage::LocalStorage;
+use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
-use gloo_storage::Storage;
 use log::{debug, warn};
 use node_manager_types::responses::LoginResponse;
 use nostr::event::builder::EventBuilder;
