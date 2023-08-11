@@ -1,4 +1,4 @@
-use cashu_crab::Invoice;
+use cashu_crab::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
 
 pub mod requests {
@@ -139,7 +139,7 @@ pub mod responses {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bolt11 {
-    pub bolt11: Invoice,
+    pub bolt11: Bolt11Invoice,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

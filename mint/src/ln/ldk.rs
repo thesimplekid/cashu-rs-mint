@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use bitcoin::{secp256k1::PublicKey, Address};
 use bitcoin_hashes::Hash;
 use cashu_crab::Amount;
+use cashu_crab::Bolt11Invoice;
 use cashu_crab::Sha256;
 use ldk_node::bitcoin::Network;
 use ldk_node::io::SqliteStore;
-use ldk_node::lightning_invoice::Invoice;
 use ldk_node::PeerDetails;
 use ldk_node::{Builder, Config};
 use ldk_node::{ChannelDetails, ChannelId, NetAddress};
@@ -76,6 +76,8 @@ impl LnProcessor for Ldk {
             .node
             .receive_payment(amount.to_msat(), description, SECS_IN_DAY)?;
 
+        let invoice = Bolt11Invoice::from_str(&invoice.to_string())?;
+
         let inoice_info = InvoiceInfo::new(
             Sha256::from_str(&invoice.payment_hash().to_owned().to_string())?,
             hash,
@@ -134,10 +136,13 @@ impl LnProcessor for Ldk {
 
     async fn pay_invoice(
         &self,
-        invoice: Invoice,
+        invoice: Bolt11Invoice,
         _max_fee: Option<Amount>,
     ) -> Result<(String, Amount), Error> {
-        let payment_hash = self.node.send_payment(&invoice)?;
+        let payment_hash = self.node.send_payment(
+            &ldk_node::lightning_invoice::Invoice::from_str(&invoice.to_string())
+                .expect("Valid LN Invoice"),
+        )?;
         let payment = self
             .node
             .list_payments_with_filter(|p| p.hash == payment_hash);
@@ -226,7 +231,10 @@ impl LnNodeManager for Ldk {
     async fn pay_invoice(&self, bolt11: Bolt11) -> Result<responses::PayInvoiceResponse, Error> {
         let p = bolt11.bolt11.payment_hash();
 
-        let _res = self.node.send_payment(&bolt11.bolt11)?;
+        let _res = self.node.send_payment(
+            &ldk_node::lightning_invoice::Invoice::from_str(&bolt11.bolt11.to_string())
+                .expect("Valid ln invoice"),
+        )?;
 
         let res = responses::PayInvoiceResponse {
             payment_hash: Sha256::from_str(&p.to_string())?,
@@ -236,11 +244,16 @@ impl LnNodeManager for Ldk {
         Ok(res)
     }
 
-    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
+    async fn create_invoice(
+        &self,
+        amount: Amount,
+        description: String,
+    ) -> Result<Bolt11Invoice, Error> {
         let invoice = self
             .node
-            .receive_payment(amount.to_msat(), &description, SECS_IN_DAY)
-            .unwrap();
+            .receive_payment(amount.to_msat(), &description, SECS_IN_DAY)?;
+
+        let invoice = Bolt11Invoice::from_str(&invoice.to_string())?;
 
         Ok(invoice)
     }

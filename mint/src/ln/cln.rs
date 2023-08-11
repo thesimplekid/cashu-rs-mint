@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::Address;
 use cashu_crab::mint::Mint;
-use cashu_crab::{types::InvoiceStatus, Amount, Invoice, Sha256};
+use cashu_crab::{types::InvoiceStatus, Amount, Bolt11Invoice, Sha256};
 use cln_rpc::model::responses::ListfundsOutputsStatus;
 use cln_rpc::model::responses::ListpeerchannelsChannelsState;
 use cln_rpc::model::responses::{ListpeersPeers, PayStatus};
@@ -79,7 +79,7 @@ impl LnProcessor for Cln {
 
         match cln_response {
             cln_rpc::Response::Invoice(invoice_response) => {
-                let invoice = Invoice::from_str(&invoice_response.bolt11)?;
+                let invoice = Bolt11Invoice::from_str(&invoice_response.bolt11)?;
                 let payment_hash = Sha256::from_str(&invoice_response.payment_hash.to_string())?;
                 let invoice_info = InvoiceInfo::new(
                     payment_hash,
@@ -167,7 +167,7 @@ impl LnProcessor for Cln {
 
     async fn pay_invoice(
         &self,
-        invoice: Invoice,
+        invoice: Bolt11Invoice,
         max_fee: Option<Amount>,
     ) -> Result<(String, Amount), Error> {
         let mut cln_client = cln_rpc::ClnRpc::new(&self.rpc_socket).await?;
@@ -411,7 +411,11 @@ impl LnNodeManager for Cln {
         Ok(response)
     }
 
-    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
+    async fn create_invoice(
+        &self,
+        amount: Amount,
+        description: String,
+    ) -> Result<Bolt11Invoice, Error> {
         let mut cln_client = self.cln_client.lock().await;
 
         let amount_msat = AmountOrAny::Amount(CLN_Amount::from_msat(amount.to_msat()));
@@ -429,7 +433,9 @@ impl LnNodeManager for Cln {
             .await?;
 
         let invoice = match cln_response {
-            cln_rpc::Response::Invoice(invoice_res) => Invoice::from_str(&invoice_res.bolt11)?,
+            cln_rpc::Response::Invoice(invoice_res) => {
+                Bolt11Invoice::from_str(&invoice_res.bolt11)?
+            }
             _ => {
                 warn!("CLN returned wrong response kind");
                 return Err(Error::WrongClnResponse);

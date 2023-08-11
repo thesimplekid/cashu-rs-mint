@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use cashu_crab::types::InvoiceStatus;
-use cashu_crab::{Amount, Invoice};
+use cashu_crab::{Amount, Bolt11Invoice};
 use gloo_net::http::Request;
 use node_manager_types::Bolt11;
 use serde_json::Value;
@@ -38,7 +38,7 @@ async fn get_invoice(
     url: &Url,
     amount: Amount,
     description: &str,
-    callback: Callback<Invoice>,
+    callback: Callback<Bolt11Invoice>,
 ) -> Result<()> {
     let mut url = url.join("invoice")?;
     url.set_query(Some(&format!(
@@ -65,7 +65,7 @@ enum View {
     Transactions,
     Send(Option<(Amount, String)>),
     Receive,
-    NewInvoice(Invoice),
+    NewInvoice(Bolt11Invoice),
 }
 
 #[derive(Properties, PartialEq, Clone)]
@@ -81,7 +81,7 @@ pub enum Msg {
     GenerateInvoice,
     SendPay,
     InvoiceChange,
-    NewInvoice(Invoice),
+    NewInvoice(Bolt11Invoice),
     Paid(InvoiceStatus),
 }
 
@@ -153,7 +153,7 @@ impl Component for Ln {
 
                 if let Some(input) = input {
                     let bolt11 = Bolt11 {
-                        bolt11: Invoice::from_str(&input.value()).unwrap(),
+                        bolt11: Bolt11Invoice::from_str(&input.value()).unwrap(),
                     };
                     spawn_local(async move {
                         post_pay_invoice(&jwt, &url, bolt11, callback).await.ok();
@@ -165,12 +165,12 @@ impl Component for Ln {
             Msg::InvoiceChange => {
                 let input = self.pay_input_node_ref.cast::<HtmlInputElement>();
                 if let Some(input) = input {
-                    if let Ok(invoice) = Invoice::from_str(&input.value()) {
+                    if let Ok(invoice) = Bolt11Invoice::from_str(&input.value()) {
                         let description = match invoice.description() {
-                            cashu_crab::lightning_invoice::InvoiceDescription::Direct(des) => {
-                                des.to_string()
-                            }
-                            cashu_crab::lightning_invoice::InvoiceDescription::Hash(_des) => {
+                            cashu_crab::lightning_invoice::Bolt11InvoiceDescription::Direct(
+                                des,
+                            ) => des.to_string(),
+                            cashu_crab::lightning_invoice::Bolt11InvoiceDescription::Hash(_des) => {
                                 "".to_string()
                             }
                         };

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bip39::{Language, Mnemonic};
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::Address;
-use cashu_crab::lightning_invoice::Invoice;
+use cashu_crab::lightning_invoice::Bolt11Invoice;
 use cashu_crab::mint::Mint;
 use cashu_crab::types::InvoiceStatus as CrabInvoiceStatus;
 use cashu_crab::Amount;
@@ -235,7 +235,7 @@ impl LnProcessor for Greenlight {
         } = cln_response.into_inner();
 
         let invoice = {
-            let invoice = Invoice::from_str(&bolt11)?;
+            let invoice = Bolt11Invoice::from_str(&bolt11)?;
             let payment_hash = Sha256::from_str(&String::from_utf8(payment_hash)?)?;
             let invoice_info = InvoiceInfo::new(
                 payment_hash,
@@ -314,7 +314,7 @@ impl LnProcessor for Greenlight {
 
     async fn pay_invoice(
         &self,
-        invoice: Invoice,
+        invoice: Bolt11Invoice,
         max_fee: Option<Amount>,
     ) -> Result<(String, Amount), Error> {
         let mut cln_client = self.node.lock().await;
@@ -537,7 +537,11 @@ impl LnNodeManager for Greenlight {
         })
     }
 
-    async fn create_invoice(&self, amount: Amount, description: String) -> Result<Invoice, Error> {
+    async fn create_invoice(
+        &self,
+        amount: Amount,
+        description: String,
+    ) -> Result<Bolt11Invoice, Error> {
         let mut node = self.node.lock().await;
 
         let amount_msat = cln::AmountOrAny {
@@ -562,7 +566,7 @@ impl LnNodeManager for Greenlight {
             .into_inner();
         let bolt11 = response.bolt11;
 
-        Ok(Invoice::from_str(&bolt11)?)
+        Ok(Bolt11Invoice::from_str(&bolt11)?)
     }
 
     async fn pay_on_chain(&self, address: Address, amount: Amount) -> Result<String, Error> {

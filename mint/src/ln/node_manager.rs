@@ -21,7 +21,7 @@ use node_manager_types::{requests, responses, Bolt11};
 use nostr::event::Event;
 use std::net::Ipv4Addr;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn};
+use tracing::warn;
 
 pub use super::error::Error;
 use super::jwt_auth::auth;
