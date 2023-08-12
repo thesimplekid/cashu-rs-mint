@@ -6,7 +6,6 @@ readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-node-manager-types = { path = "../types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wasm-bindgen-futures = "0.4.37"
@@ -24,3 +23,4 @@ anyhow = "1.0.71"
 jwt-compact = { workspace = true }
 url = "2.4.0"
 gloo-net = "0.4.0"
+ln-rs = { workspace = true }

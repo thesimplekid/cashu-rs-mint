@@ -5,7 +5,6 @@ edition = "2021"
 
 
 [dependencies]
-node-manager-types = {path="../types"}
 anyhow = "1.0.71"
 async-trait = "0.1.68"
 axum = "0.6.18"
@@ -38,3 +37,4 @@ axum-extra = { version = "0.7.4", features = ["cookie"] }
 time = "0.3.22"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "default", "derive"]}
+ln-rs = { workspace = true }
