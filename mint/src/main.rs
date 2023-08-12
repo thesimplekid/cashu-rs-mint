@@ -35,7 +35,7 @@ use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, warn};
 use types::KeysetInfo;
-use utils::unix_time;
+use utils::{cashu_crab_amount_to_ln_rs_amount, ln_rs_amount_to_cashu_crab_amount, unix_time};
 
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
@@ -360,7 +360,7 @@ async fn get_request_mint(
     let invoice = state
         .ln
         .ln_processor
-        .get_invoice(amount, hash, "")
+        .get_invoice(cashu_crab_amount_to_ln_rs_amount(amount), hash, "")
         .await
         .map_err(|err| {
             warn!("{}", err);
@@ -394,7 +394,7 @@ async fn post_mint(
 
     // debug!("{:?}", invoice);
 
-    if invoice.amount != payload.total_amount() {
+    if invoice.amount != cashu_crab_amount_to_ln_rs_amount(payload.total_amount()) {
         return Err(Error::InvoiceNotPaid);
     }
 
@@ -438,7 +438,8 @@ async fn post_mint(
                 warn!("{}", err);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-            let in_circulation = db.get_in_circulation().await.unwrap() + invoice.amount;
+            let in_circulation = db.get_in_circulation().await.unwrap()
+                + ln_rs_amount_to_cashu_crab_amount(invoice.amount);
 
             db.set_in_circulation(&in_circulation).await.ok();
 
@@ -468,7 +469,8 @@ async fn post_check_fee(
     let amount_sat = amount_msat / 1000;
     let amount = Amount::from(amount_sat);
 
-    let fee = fee_reserve(amount);
+    let fee =
+        ln_rs_amount_to_cashu_crab_amount(fee_reserve(cashu_crab_amount_to_ln_rs_amount(amount)));
 
     Ok(Json(CheckFeesResponse { fee }))
 }
@@ -519,7 +521,11 @@ async fn post_melt(
         })?;
 
     let melt_response = mint
-        .process_melt_request(&payload, &pay_res.0, pay_res.1)
+        .process_melt_request(
+            &payload,
+            &pay_res.0,
+            ln_rs_amount_to_cashu_crab_amount(pay_res.1),
+        )
         .map_err(|err| {
             warn!("{}", err);
             StatusCode::INTERNAL_SERVER_ERROR

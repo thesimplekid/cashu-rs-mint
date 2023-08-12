@@ -4,13 +4,14 @@ use anyhow::Result;
 use cashu_crab::Amount;
 use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
-use ln_rs::node_manager_types::responses::BalanceResponse;
+use ln_rs_models::responses::BalanceResponse;
 use log::debug;
 use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 use crate::components::manager_url::SetManagerUrl;
+use crate::utils::ln_rs_amount_to_cashu_crab_amount;
 
 use crate::components::{
     balance::Balance, cashu::Cashu, channels::Channels, ln::Ln, login::Login, on_chain::OnChain,
@@ -88,7 +89,7 @@ pub struct App {
     view: View,
     jwt: Option<String>,
     node_url: Option<Url>,
-    on_chain_confimed: Amount,
+    on_chain_confirmed: Amount,
     on_chain_pending: Amount,
     ln: Amount,
     cashu_in_circulation: Amount,
@@ -162,10 +163,13 @@ impl Component for App {
                 true
             }
             Msg::FetechedBalances(balance_response) => {
-                self.on_chain_confimed = balance_response.on_chain_spendable;
-                self.on_chain_pending =
-                    balance_response.on_chain_total - balance_response.on_chain_spendable;
-                self.ln = balance_response.ln;
+                self.on_chain_confirmed =
+                    ln_rs_amount_to_cashu_crab_amount(balance_response.on_chain_spendable);
+
+                self.on_chain_pending = ln_rs_amount_to_cashu_crab_amount(
+                    balance_response.on_chain_total - balance_response.on_chain_spendable,
+                );
+                self.ln = ln_rs_amount_to_cashu_crab_amount(balance_response.ln);
 
                 true
             }
@@ -203,7 +207,7 @@ impl Component for App {
                             <>
                   <div class="flex flex-row mb-4">
                     <div class="p-2 w-1/3">
-                      <Balance on_chain_confimed={self.on_chain_confimed} on_chain_pending={self.on_chain_pending} ln={self.ln}/>
+                      <Balance on_chain_confirmed={self.on_chain_confirmed} on_chain_pending={self.on_chain_pending} ln={self.ln}/>
                     </div>
                     <div class="p-2 w-1/3">
                       <Cashu balance={self.cashu_in_circulation}/>

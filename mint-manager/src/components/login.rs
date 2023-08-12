@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
-use ln_rs::node_manager_types::responses::LoginResponse;
+use ln_rs_models::responses::LoginResponse;
 use log::{debug, warn};
 use nostr::event::builder::EventBuilder;
 use nostr::event::kind::Kind;

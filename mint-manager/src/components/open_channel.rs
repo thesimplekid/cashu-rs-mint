@@ -5,13 +5,15 @@ use anyhow::Result;
 use bitcoin::secp256k1::PublicKey;
 use cashu_crab::Amount;
 use gloo_net::http::Request;
-use ln_rs::node_manager_types::requests::OpenChannelRequest;
-use ln_rs::node_manager_types::responses::{self, ChannelInfo};
+use ln_rs_models::requests::OpenChannelRequest;
+use ln_rs_models::responses::{self, ChannelInfo};
 use log::warn;
 use url::Url;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::platform::spawn_local;
 use yew::prelude::*;
+
+use crate::utils::cashu_crab_amount_to_ln_rs_amount;
 
 async fn post_open_channel(
     jwt: &str,
@@ -141,8 +143,10 @@ impl Component for OpenChannel {
                             public_key,
                             host,
                             port,
-                            amount,
-                            push_amount,
+                            amount: cashu_crab_amount_to_ln_rs_amount(amount),
+                            push_amount: Some(cashu_crab_amount_to_ln_rs_amount(
+                                push_amount.unwrap_or(cashu_crab::Amount::default()),
+                            )),
                         };
 
                         let callback = ctx.link().callback(Msg::ChannelOpened);

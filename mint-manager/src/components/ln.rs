@@ -4,7 +4,7 @@ use anyhow::Result;
 use cashu_crab::types::InvoiceStatus;
 use cashu_crab::{Amount, Bolt11Invoice};
 use gloo_net::http::Request;
-use ln_rs::node_manager_types::Bolt11;
+use ln_rs_models::Bolt11;
 use serde_json::Value;
 use url::Url;
 use web_sys::HtmlInputElement;

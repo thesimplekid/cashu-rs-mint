@@ -1,6 +1,7 @@
 mod app;
 mod bindings;
 mod components;
+mod utils;
 
 use app::App;
 

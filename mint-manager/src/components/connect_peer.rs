@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use bitcoin::secp256k1::PublicKey;
 use gloo_net::http::Request;
-use ln_rs::node_manager_types::requests::ConnectPeerRequest;
+use ln_rs_models::requests::ConnectPeerRequest;
 use log::warn;
 use url::Url;
 use web_sys::HtmlInputElement;
