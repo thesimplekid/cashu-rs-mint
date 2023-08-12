@@ -14,12 +14,9 @@ motd = "Hello world"
 email = "me@example.com"
 
 [ln]
-authorized_users = ["04918dfc36c93e7db6cc0d60f37e1522f1c36b64d3f4b424c532d7c595febbc5"]
-enable_node_manager = true
-jwt_secret = "supersecretprivatekey"
 
 # Required ln backend `Cln`, `Ldk`, `Greenlight`
-ln_backend = "Greenlight"
+ln_backend = "Cln"
 
 # CLN
 cln_path = "~/.lightning/signet/lightning-rpc"
@@ -29,3 +26,10 @@ cln_path = "~/.lightning/signet/lightning-rpc"
 
 fee_percent = 1.0
 reserve_fee_min = 1000
+
+[node_manager]
+enable_node_manager = false
+authorized_users = ["04918dfc36c93e7db6cc0d60f37e1522f1c36b64d3f4b424c532d7c595febbc5"]
+jwt_secret = "supersecretprivatekey"
+listen_host = "127.0.0.1"
+listen_port = 8086

@@ -86,9 +86,6 @@ pub enum LnBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
     pub ln_backend: LnBackend,
-    pub enable_node_manager: bool,
-    pub authorized_users: HashSet<XOnlyPublicKey>,
-    pub jwt_secret: String,
     pub cln_path: Option<PathBuf>,
     pub greenlight_invite_code: Option<String>,
     pub invoice_description: Option<String>,
@@ -97,10 +94,20 @@ pub struct Ln {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NodeManager {
+    pub enable_node_manager: bool,
+    pub authorized_users: HashSet<XOnlyPublicKey>,
+    pub jwt_secret: String,
+    pub listen_host: String,
+    pub listen_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub info: Info,
     pub mint_info: MintInfo,
     pub ln: Ln,
+    pub node_manager: Option<NodeManager>,
 }
 
 impl Settings {

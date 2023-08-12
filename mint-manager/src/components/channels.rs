@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use bitcoin::secp256k1::PublicKey;
 use gloo_net::http::Request;
-use node_manager_types::responses::{self, ChannelInfo};
+use ln_rs::node_manager_types::responses::{self, ChannelInfo};
 use serde_json::Value;
 use url::Url;
 use yew::platform::spawn_local;

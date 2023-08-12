@@ -11,7 +11,7 @@ pub enum Error {
     InvoiceExpired,
     DecodeInvoice,
     StatusCode(StatusCode),
-    _Ln(crate::ln::Error),
+    _Ln(ln_rs::Error),
 }
 
 impl std::error::Error for Error {}

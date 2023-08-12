@@ -7,8 +7,8 @@ use cashu_crab::{Amount, Sha256};
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
-use crate::ln::InvoiceInfo;
 use crate::types::KeysetInfo;
+use ln_rs::InvoiceInfo;
 
 // Key: KeysetId
 // Value: Keyset

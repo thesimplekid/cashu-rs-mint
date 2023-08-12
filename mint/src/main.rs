@@ -23,13 +23,13 @@ use cashu_crab::nuts::nut06::{SplitRequest, SplitResponse};
 use cashu_crab::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
 use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
 use cashu_crab::nuts::nut09::MintVersion;
-use cashu_crab::nuts::*;
 use cashu_crab::{mint::Mint, Sha256};
+use cashu_crab::{nuts::*, Bolt11Invoice};
 use clap::Parser;
-use ln::cln::fee_reserve;
-use ln::greenlight::Greenlight;
-use ln::ldk::Ldk;
-use ln::{InvoiceStatus, InvoiceTokenStatus, Ln};
+use futures::StreamExt;
+use ln_rs::cln::fee_reserve;
+use ln_rs::greenlight::Greenlight;
+use ln_rs::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
@@ -43,13 +43,11 @@ use crate::cli::CLIArgs;
 use crate::config::LnBackend;
 use crate::database::Db;
 use crate::error::Error;
-use crate::ln::cln::Cln;
 
 mod cli;
 mod config;
 mod database;
 mod error;
-mod ln;
 mod types;
 mod utils;
 
@@ -116,12 +114,18 @@ async fn main() -> anyhow::Result<()> {
                     .ok_or(anyhow!("cln socket not defined"))?,
             )
             .ok_or(anyhow!("cln socket not defined"))?;
+            // TODO: get this from db
 
-            let cln = Arc::new(Cln::new(cln_socket, db.clone(), mint.clone()).await?);
+            let last_pay_index = db.get_last_pay_index().await?;
 
-            let node_manager = match settings.ln.enable_node_manager {
-                true => Some(ln::node_manager::Nodemanger::Cln(cln.clone())),
-                false => None,
+            let cln = Arc::new(ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?);
+
+            let node_manager = if settings.node_manager.is_some()
+                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+            {
+                Some(ln_rs::node_manager::Nodemanger::Cln(cln.clone()))
+            } else {
+                None
             };
 
             Ln {
@@ -131,17 +135,24 @@ async fn main() -> anyhow::Result<()> {
         }
         LnBackend::Greenlight => {
             // Greenlight::recover().await.unwrap();
+            // TODO: get this from db
+            let last_pay_index = None;
 
             let gln = match args.recover {
-                Some(seed) => {
-                    Arc::new(Greenlight::recover(&seed, db.clone(), &settings, mint.clone()).await?)
+                Some(seed) => Arc::new(Greenlight::recover(&seed, last_pay_index).await?),
+                None => {
+                    let invite_code = settings.ln.greenlight_invite_code.clone();
+
+                    Arc::new(Greenlight::new(invite_code).await?)
                 }
-                None => Arc::new(Greenlight::new(db.clone(), &settings, mint.clone()).await?),
             };
 
-            let node_manager = match settings.ln.enable_node_manager {
-                true => Some(ln::node_manager::Nodemanger::Greenlight(gln.clone())),
-                false => None,
+            let node_manager = if settings.node_manager.is_some()
+                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+            {
+                Some(ln_rs::node_manager::Nodemanger::Greenlight(gln.clone()))
+            } else {
+                None
             };
 
             Ln {
@@ -150,11 +161,14 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         LnBackend::Ldk => {
-            let ldk = Arc::new(Ldk::new(&settings, db.clone()).await?);
+            let ldk = Arc::new(ln_rs::Ldk::new().await?);
 
-            let node_manager = match settings.ln.enable_node_manager {
-                true => Some(ln::node_manager::Nodemanger::Ldk(ldk.clone())),
-                false => None,
+            let node_manager = if settings.node_manager.is_some()
+                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+            {
+                Some(ln_rs::node_manager::Nodemanger::Ldk(ldk.clone()))
+            } else {
+                None
             };
 
             Ln {
@@ -165,11 +179,16 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let ln_clone = ln.clone();
+    let db_clone = db.clone();
 
     tokio::spawn(async move {
         loop {
-            if let Err(err) = ln_clone.ln_processor.wait_invoice().await {
-                warn!("{}", err);
+            let mut stream = ln_clone.ln_processor.wait_invoice().await.unwrap();
+
+            while let Some((invoice, pay_index)) = stream.next().await {
+                handle_paid_invoice(&db_clone, invoice, pay_index)
+                    .await
+                    .unwrap();
             }
         }
     });
@@ -179,16 +198,27 @@ async fn main() -> anyhow::Result<()> {
 
     let settings_clone = settings.clone();
 
-    let db_clone = db.clone();
-
-    if settings.ln.enable_node_manager {
+    if settings_clone.node_manager.is_some()
+        && settings_clone
+            .node_manager
+            .as_ref()
+            .unwrap()
+            .enable_node_manager
+            .eq(&true)
+    {
+        let node_manager_settings = settings_clone.node_manager.unwrap();
         tokio::spawn(async move {
             loop {
                 if let Err(err) = ln_clone
                     .clone()
                     .node_manager
                     .unwrap()
-                    .start_server(&settings_clone, db_clone.clone())
+                    .start_server(
+                        &node_manager_settings.listen_host,
+                        node_manager_settings.listen_port,
+                        node_manager_settings.authorized_users.clone(),
+                        &node_manager_settings.jwt_secret,
+                    )
                     .await
                 {
                     warn!("{:?}", err)
@@ -229,6 +259,27 @@ async fn main() -> anyhow::Result<()> {
     axum::Server::bind(&listen_addr)
         .serve(mint_service.into_make_service())
         .await?;
+
+    Ok(())
+}
+
+async fn handle_paid_invoice(
+    db: &Db,
+    invoice: Bolt11Invoice,
+    last_pay_index: Option<u64>,
+) -> anyhow::Result<()> {
+    if let Some(pay_index) = last_pay_index {
+        db.set_last_pay_index(pay_index).await?;
+    }
+
+    let payment_hash = Sha256::from_str(&invoice.payment_hash().to_string())?;
+
+    let mut invoice_info = db.get_invoice_info_by_payment_hash(&payment_hash).await?;
+
+    invoice_info.status = InvoiceStatus::Paid;
+    invoice_info.confirmed_at = Some(unix_time());
+
+    db.add_invoice(&invoice_info).await?;
 
     Ok(())
 }
