@@ -186,9 +186,9 @@ async fn main() -> anyhow::Result<()> {
             let mut stream = ln_clone.ln_processor.wait_invoice().await.unwrap();
 
             while let Some((invoice, pay_index)) = stream.next().await {
-                handle_paid_invoice(&db_clone, invoice, pay_index)
-                    .await
-                    .unwrap();
+                if let Err(err) = handle_paid_invoice(&db_clone, invoice, pay_index).await {
+                    warn!("{:?}", err);
+                }
             }
         }
     });
