@@ -28,7 +28,7 @@ fee_percent = 1.0
 reserve_fee_min = 1000
 
 [node_manager]
-enable_node_manager = false
+enable_node_manager = true
 authorized_users = ["04918dfc36c93e7db6cc0d60f37e1522f1c36b64d3f4b424c532d7c595febbc5"]
 jwt_secret = "supersecretprivatekey"
 listen_host = "127.0.0.1"

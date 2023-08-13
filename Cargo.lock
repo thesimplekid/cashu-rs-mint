@@ -215,9 +215,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.72"
+version = "0.1.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc6dde6e4ed435a4c1ee4e73592f5ba9da2151af10076cc04858746af9352d09"
+checksum = "bc00ceb34980c03614e35a3a4e218276a0a824e911d07651cd0d858a51e8c0f0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -549,7 +549,7 @@ checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
 [[package]]
 name = "cashu-crab"
 version = "0.4.0-ALPHA"
-source = "git+https://github.com/thesimplekid/cashu-crab#04fe004a4b7f94af1c5c0453d8dad845a1ddb27a"
+source = "git+https://github.com/thesimplekid/cashu-crab#ff67b070b875424cb080270a36cc332bc6b61089"
 dependencies = [
  "base64 0.21.2",
  "bitcoin 0.30.1",
@@ -717,7 +717,7 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 [[package]]
 name = "cln-grpc"
 version = "0.1.3"
-source = "git+https://github.com/ElementsProject/lightning.git?branch=master#846cec4f2a70429c0a366b0b3884edf7a9edcd97"
+source = "git+https://github.com/ElementsProject/lightning.git?branch=master#1f929114d905c9df71342591dab7d210454bc35b"
 dependencies = [
  "anyhow",
  "bitcoin 0.29.2",
@@ -1806,9 +1806,9 @@ checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
 
 [[package]]
 name = "httpdate"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "humantime"
@@ -2296,7 +2296,7 @@ checksum = "57bcfdad1b858c2db7c38303a6d2ad4dfaf5eb53dfeb0910128b2c26d6158503"
 [[package]]
 name = "ln-rs"
 version = "0.2.0"
-source = "git+https://github.com/thesimplekid/ln-rs#58cbb3da38023527005c902c7a5d1f0cfc357ed3"
+source = "git+https://github.com/thesimplekid/ln-rs#17c2e43be1206e8676c8ca52da6da799f7624ba1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2315,7 +2315,7 @@ dependencies = [
  "jwt-compact",
  "ldk-node 0.1.0 (git+https://github.com/lightningdevkit/ldk-node)",
  "lightning-invoice 0.24.0",
- "ln-rs-models 0.1.0 (git+https://github.com/thesimplekid/ln-rs)",
+ "ln-rs-models",
  "nostr",
  "rand",
  "serde",
@@ -2332,30 +2332,11 @@ dependencies = [
 [[package]]
 name = "ln-rs-models"
 version = "0.1.0"
+source = "git+https://github.com/thesimplekid/ln-rs#17c2e43be1206e8676c8ca52da6da799f7624ba1"
 dependencies = [
  "anyhow",
  "bitcoin 0.30.1",
- "cln-rpc",
- "gl-client",
  "jwt-compact",
- "ldk-node 0.1.0 (git+https://github.com/lightningdevkit/ldk-node)",
- "lightning-invoice 0.24.0",
- "nostr",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "ln-rs-models"
-version = "0.1.0"
-source = "git+https://github.com/thesimplekid/ln-rs#58cbb3da38023527005c902c7a5d1f0cfc357ed3"
-dependencies = [
- "anyhow",
- "bitcoin 0.30.1",
- "cln-rpc",
- "gl-client",
- "jwt-compact",
- "ldk-node 0.1.0 (git+https://github.com/lightningdevkit/ldk-node)",
  "lightning-invoice 0.24.0",
  "nostr",
  "serde",
@@ -2374,9 +2355,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.19"
+version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b06a4cde4c0f271a446782e3eff8de789548ce57dbc8eca9292c27f4a42004b4"
+checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
 name = "matchit"
@@ -2447,7 +2428,7 @@ dependencies = [
  "gloo-net 0.4.0",
  "js-sys",
  "jwt-compact",
- "ln-rs-models 0.1.0",
+ "ln-rs-models",
  "log",
  "nostr",
  "serde",
@@ -3665,9 +3646,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.30.0"
+version = "1.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d3ce25f50619af8b0aec2eb23deebe84249e19e2ddd393a6e16e3300a6dadfd"
+checksum = "40de3a2ba249dcb097e01be5e67a5ff53cf250397715a071a81543e8a832a920"
 dependencies = [
  "backtrace",
  "bytes",
@@ -4380,9 +4361,9 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
 name = "winnow"
-version = "0.5.9"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4344c9f03e6918ce61d94ea6b0500964bb42ee9ca9b2c9c8931990e20b481144"
+checksum = "5504cc7644f4b593cbc05c4a55bf9bd4e94b867c3c0bd440934174d50482427d"
 dependencies = [
  "memchr",
 ]

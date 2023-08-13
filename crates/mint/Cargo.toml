@@ -5,7 +5,7 @@ edition = "2021"
 
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = { workspace = true }
 async-trait = "0.1.68"
 axum = "0.6.18"
 axum-macros = "0.3.7"
@@ -30,7 +30,7 @@ bitcoin = { workspace = true }
 tower-http = { version = "0.4.1", features = ["cors"] }
 bech32 = "0.9.1"
 hex = "0.4.3"
-url = "2.4.0"
+url = { workspace = true }
 nostr = { workspace = true }
 jwt-compact = { workspace = true } 
 axum-extra = { version = "0.7.4", features = ["cookie"] }
