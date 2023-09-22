@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use cashu_crab::types::InvoiceStatus;
-use cashu_crab::{Amount, Bolt11Invoice};
+use cashu_sdk::types::InvoiceStatus;
+use cashu_sdk::{Amount, Bolt11Invoice};
 use gloo_net::http::Request;
 use ln_rs_models::Bolt11;
 use serde_json::Value;
@@ -167,10 +167,10 @@ impl Component for Ln {
                 if let Some(input) = input {
                     if let Ok(invoice) = Bolt11Invoice::from_str(&input.value()) {
                         let description = match invoice.description() {
-                            cashu_crab::lightning_invoice::Bolt11InvoiceDescription::Direct(
-                                des,
-                            ) => des.to_string(),
-                            cashu_crab::lightning_invoice::Bolt11InvoiceDescription::Hash(_des) => {
+                            cashu_sdk::lightning_invoice::Bolt11InvoiceDescription::Direct(des) => {
+                                des.to_string()
+                            }
+                            cashu_sdk::lightning_invoice::Bolt11InvoiceDescription::Hash(_des) => {
                                 "".to_string()
                             }
                         };

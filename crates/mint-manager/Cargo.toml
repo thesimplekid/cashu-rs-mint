@@ -11,7 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 wasm-bindgen-futures = "0.4.37"
 yew = { version="0.20", features=["csr"] }
-cashu-crab = { workspace = true }
+cashu-sdk = { workspace = true }
 bitcoin = { workspace = true }
 log = "0.4.19"
 wasm-logger = "0.2.0"

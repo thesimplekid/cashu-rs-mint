@@ -22,10 +22,10 @@ pub fn expand_path(path: &str) -> Option<PathBuf> {
     }
 }
 
-pub fn cashu_crab_amount_to_ln_rs_amount(amount: cashu_crab::Amount) -> ln_rs::Amount {
+pub fn cashu_crab_amount_to_ln_rs_amount(amount: cashu_sdk::Amount) -> ln_rs::Amount {
     ln_rs::Amount::from_sat(amount.to_sat())
 }
 
-pub fn ln_rs_amount_to_cashu_crab_amount(amount: ln_rs::Amount) -> cashu_crab::Amount {
-    cashu_crab::Amount::from_sat(amount.to_sat())
+pub fn ln_rs_amount_to_cashu_crab_amount(amount: ln_rs::Amount) -> cashu_sdk::Amount {
+    cashu_sdk::Amount::from_sat(amount.to_sat())
 }

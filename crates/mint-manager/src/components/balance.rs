@@ -1,4 +1,4 @@
-use cashu_crab::Amount;
+use cashu_sdk::Amount;
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq, Default, Clone)]

@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bitcoin::secp256k1::PublicKey;
-use cashu_crab::Amount;
+use cashu_sdk::Amount;
 use gloo_net::http::Request;
 use ln_rs_models::requests::OpenChannelRequest;
 use ln_rs_models::responses::{self, ChannelInfo};
@@ -145,7 +145,7 @@ impl Component for OpenChannel {
                             port,
                             amount: cashu_crab_amount_to_ln_rs_amount(amount),
                             push_amount: Some(cashu_crab_amount_to_ln_rs_amount(
-                                push_amount.unwrap_or(cashu_crab::Amount::default()),
+                                push_amount.unwrap_or(cashu_sdk::Amount::default()),
                             )),
                         };
 

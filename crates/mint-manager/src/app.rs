@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use cashu_crab::Amount;
+use cashu_sdk::Amount;
 use gloo::storage::{LocalStorage, Storage};
 use gloo_net::http::Request;
 use ln_rs_models::responses::BalanceResponse;

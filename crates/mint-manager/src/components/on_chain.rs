@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cashu_crab::Amount;
+use cashu_sdk::Amount;
 use gloo_net::http::Request;
 use ln_rs_models::{requests::PayOnChainRequest, responses::FundingAddressResponse};
 use url::Url;

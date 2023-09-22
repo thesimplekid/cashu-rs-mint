@@ -32,7 +32,7 @@ use std::{
     str::FromStr,
 };
 
-use cashu_crab::Amount;
+use cashu_sdk::Amount;
 use config::{Config, ConfigError, File};
 use nostr::key::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,8 @@ pub struct Info {
     pub derivation_path: String,
     #[serde(default = "max_order_default")]
     pub max_order: u8,
+    pub min_fee_reserve: Amount,
+    pub min_fee_percent: f32,
 }
 
 fn path_default() -> PathBuf {

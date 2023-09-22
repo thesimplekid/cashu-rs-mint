@@ -14,17 +14,18 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
-use cashu_crab::amount::Amount;
-use cashu_crab::nuts::nut01::Keys;
-use cashu_crab::nuts::nut03::RequestMintResponse;
-use cashu_crab::nuts::nut04::{MintRequest, PostMintResponse};
-use cashu_crab::nuts::nut05::{CheckFeesRequest, CheckFeesResponse};
-use cashu_crab::nuts::nut06::{SplitRequest, SplitResponse};
-use cashu_crab::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
-use cashu_crab::nuts::nut08::{MeltRequest, MeltResponse};
-use cashu_crab::nuts::nut09::MintVersion;
-use cashu_crab::{mint::Mint, Sha256};
-use cashu_crab::{nuts::*, Bolt11Invoice};
+use cashu_sdk::amount::Amount;
+use cashu_sdk::nuts::nut01::Keys;
+use cashu_sdk::nuts::nut02::{mint::KeySet, Id};
+use cashu_sdk::nuts::nut03::RequestMintResponse;
+use cashu_sdk::nuts::nut04::{MintRequest, PostMintResponse};
+use cashu_sdk::nuts::nut05::{CheckFeesRequest, CheckFeesResponse};
+use cashu_sdk::nuts::nut06::{SplitRequest, SplitResponse};
+use cashu_sdk::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
+use cashu_sdk::nuts::nut08::{MeltRequest, MeltResponse};
+use cashu_sdk::nuts::nut09::MintVersion;
+use cashu_sdk::{mint::Mint, Sha256};
+use cashu_sdk::{nuts::*, Bolt11Invoice};
 use clap::Parser;
 use futures::StreamExt;
 use ln_rs::cln::fee_reserve;
@@ -76,9 +77,16 @@ async fn main() -> anyhow::Result<()> {
 
     let all_keysets = db.get_all_keyset_info().await?;
 
-    let inactive_keysets: HashMap<String, nut02::mint::KeySet> = all_keysets
+    let inactive_keysets: HashMap<Id, nut02::mint::KeySet> = all_keysets
         .iter()
-        .map(|(k, v)| (k.to_owned(), v.keyset.clone()))
+        // FIXME: Handle unwrap
+        // TODO: SHould check that ID matches
+        .map(|(k, v)| {
+            (
+                Id::try_from_base64(k).unwrap(),
+                KeySet::generate(&v.secret, &v.derivation_path, v.max_order),
+            )
+        })
         .collect();
 
     let spent_secrets = db.get_spent_secrets().await?;
@@ -89,6 +97,8 @@ async fn main() -> anyhow::Result<()> {
         inactive_keysets,
         spent_secrets,
         settings.info.max_order,
+        settings.info.min_fee_reserve,
+        settings.info.min_fee_percent,
     );
 
     let keyset = mint.active_keyset();
@@ -96,7 +106,10 @@ async fn main() -> anyhow::Result<()> {
     let keyset_info = KeysetInfo {
         valid_from: unix_time(),
         valid_to: None,
-        keyset,
+        id: keyset.id,
+        secret: settings.info.secret_key.clone(),
+        derivation_path: settings.info.derivation_path.clone(),
+        max_order: settings.info.max_order,
     };
     db.add_keyset(&keyset_info).await?;
 
@@ -355,7 +368,7 @@ async fn get_request_mint(
 ) -> Result<Json<RequestMintResponse>, Error> {
     let amount = params.amount;
 
-    let hash = sha256::Hash::hash(&cashu_crab::utils::random_hash());
+    let hash = sha256::Hash::hash(&cashu_sdk::utils::random_hash());
 
     let invoice = state
         .ln
@@ -593,7 +606,7 @@ async fn get_info(State(state): State<MintState>) -> Result<Json<nut09::MintInfo
         version: Some(mint_version),
         description: state.mint_info.description,
         description_long: state.mint_info.description_long,
-        contact,
+        contact: Some(contact),
         nuts,
         motd: state.mint_info.motd,
     };

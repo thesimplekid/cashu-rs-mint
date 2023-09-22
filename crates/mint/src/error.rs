@@ -2,7 +2,7 @@ use std::fmt;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use cashu_crab::lightning_invoice::ParseOrSemanticError;
+use cashu_sdk::lightning_invoice::ParseOrSemanticError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]

@@ -1,9 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Result};
-use cashu_crab::nuts::nut00::Proofs;
-use cashu_crab::{Amount, Sha256};
+use cashu_sdk::nuts::nut00::Proofs;
+use cashu_sdk::nuts::nut02::Id;
+use cashu_sdk::secret::Secret;
+use cashu_sdk::{Amount, Sha256};
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
@@ -29,7 +32,7 @@ const HASH: TableDefinition<&str, &str> = TableDefinition::new("hash");
 
 // KEY: Secret
 // VALUE: serialized proof
-const USED_PROOFS: TableDefinition<&[u8], &str> = TableDefinition::new("used_proofs");
+const USED_PROOFS: TableDefinition<&str, &str> = TableDefinition::new("used_proofs");
 
 #[derive(Debug, Clone)]
 pub struct Db {
@@ -66,7 +69,7 @@ impl Db {
             let mut keysets_table = write_txn.open_table(KEYSETS)?;
 
             keysets_table.insert(
-                keyset_info.keyset.id.to_string().as_str(),
+                keyset_info.id.to_string().as_str(),
                 keyset_info.as_json()?.as_str(),
             )?;
         }
@@ -109,7 +112,7 @@ impl Db {
         Ok(keyset_info)
     }
 
-    pub async fn set_active_keyset(&self, keyset_id: &str) -> Result<()> {
+    pub async fn set_active_keyset(&self, keyset_id: &Id) -> Result<()> {
         let db = self.db.lock().await;
 
         let write_txn = db.begin_write()?;
@@ -314,7 +317,7 @@ impl Db {
 
             for proof in proofs {
                 used_proof_table.insert(
-                    proof.secret.as_bytes(),
+                    proof.secret.to_string().as_str(),
                     serde_json::to_string(proof)?.as_str(),
                 )?;
             }
@@ -324,7 +327,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_spent_secrets(&self) -> Result<HashSet<String>> {
+    pub async fn get_spent_secrets(&self) -> Result<HashSet<Secret>> {
         let db = self.db.lock().await;
 
         let read_txn = db.begin_read()?;
@@ -334,7 +337,7 @@ impl Db {
         let used_proofs = used_proofs_table
             .iter()?
             .flatten()
-            .map(|(k, _v)| String::from_utf8(k.value().to_vec()).unwrap())
+            .flat_map(|(k, _v)| Secret::from_str(k.value()))
             .collect();
         Ok(used_proofs)
     }

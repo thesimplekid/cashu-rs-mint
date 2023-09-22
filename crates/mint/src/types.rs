@@ -1,12 +1,15 @@
 use anyhow::Result;
-use cashu_crab::nuts::nut02::mint::KeySet;
+use cashu_sdk::nuts::nut02::Id;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeysetInfo {
+    pub id: Id,
     pub valid_from: u64,
     pub valid_to: Option<u64>,
-    pub keyset: KeySet,
+    pub secret: String,
+    pub derivation_path: String,
+    pub max_order: u8,
 }
 
 impl KeysetInfo {
