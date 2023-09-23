@@ -80,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
     let inactive_keysets: HashMap<Id, nut02::mint::KeySet> = all_keysets
         .iter()
         // FIXME: Handle unwrap
-        // TODO: SHould check that ID matches
+        // TODO: Should check that ID matches
         .map(|(k, v)| {
             (
                 Id::try_from_base64(k).unwrap(),
@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
             let cln = Arc::new(ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?);
 
             let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+                && settings.node_manager.as_ref().unwrap().enable_node_manager
             {
                 Some(ln_rs::node_manager::Nodemanger::Cln(cln.clone()))
             } else {
@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+                && settings.node_manager.as_ref().unwrap().enable_node_manager
             {
                 Some(ln_rs::node_manager::Nodemanger::Greenlight(gln.clone()))
             } else {
@@ -177,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
             let ldk = Arc::new(ln_rs::Ldk::new().await?);
 
             let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager == true
+                && settings.node_manager.as_ref().unwrap().enable_node_manager
             {
                 Some(ln_rs::node_manager::Nodemanger::Ldk(ldk.clone()))
             } else {
