@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -29,7 +29,6 @@ use cashu_sdk::{nuts::*, Bolt11Invoice};
 use clap::Parser;
 use futures::StreamExt;
 use ln_rs::cln::fee_reserve;
-use ln_rs::greenlight::Greenlight;
 use ln_rs::{InvoiceStatus, InvoiceTokenStatus, Ln};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -41,7 +40,6 @@ use utils::{cashu_crab_amount_to_ln_rs_amount, ln_rs_amount_to_cashu_crab_amount
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 use crate::cli::CLIArgs;
-use crate::config::LnBackend;
 use crate::database::Db;
 use crate::error::Error;
 
@@ -115,80 +113,108 @@ async fn main() -> anyhow::Result<()> {
 
     let mint = Arc::new(Mutex::new(mint));
 
-    let ln = match &settings.ln.ln_backend {
-        LnBackend::Cln => {
-            let cln_socket = utils::expand_path(
-                settings
-                    .ln
-                    .cln_path
-                    .clone()
-                    .ok_or(anyhow!("cln socket not defined"))?
-                    .to_str()
-                    .ok_or(anyhow!("cln socket not defined"))?,
-            )
-            .ok_or(anyhow!("cln socket not defined"))?;
-            // TODO: get this from db
+    /*
+        let ln = match &settings.ln.ln_backend {
+            LnBackend::Cln => {
+                let cln_socket = utils::expand_path(
+                    settings
+                        .ln
+                        .cln_path
+                        .clone()
+                        .ok_or(anyhow!("cln socket not defined"))?
+                        .to_str()
+                        .ok_or(anyhow!("cln socket not defined"))?,
+                )
+                .ok_or(anyhow!("cln socket not defined"))?;
+                // TODO: get this from db
 
-            let last_pay_index = db.get_last_pay_index().await?;
+                let last_pay_index = db.get_last_pay_index().await?;
 
-            let cln = Arc::new(ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?);
+                let cln = Arc::new(ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?);
 
-            let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager
-            {
-                Some(ln_rs::node_manager::Nodemanger::Cln(cln.clone()))
-            } else {
-                None
-            };
+                let node_manager = if settings.node_manager.is_some()
+                    && settings.node_manager.as_ref().unwrap().enable_node_manager
+                {
+                    Some(ln_rs::node_manager::NodeManger(cln.clone()))
+                } else {
+                    None
+                };
 
-            Ln {
-                ln_processor: cln,
-                node_manager,
-            }
-        }
-        LnBackend::Greenlight => {
-            // Greenlight::recover().await.unwrap();
-            // TODO: get this from db
-            let last_pay_index = None;
-
-            let gln = match args.recover {
-                Some(seed) => Arc::new(Greenlight::recover(&seed, last_pay_index).await?),
-                None => {
-                    let invite_code = settings.ln.greenlight_invite_code.clone();
-
-                    Arc::new(Greenlight::new(invite_code).await?)
+                Ln {
+                    ln_processor: cln,
+                    node_manager,
                 }
-            };
-
-            let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager
-            {
-                Some(ln_rs::node_manager::Nodemanger::Greenlight(gln.clone()))
-            } else {
-                None
-            };
-
-            Ln {
-                ln_processor: gln,
-                node_manager,
             }
-        }
-        LnBackend::Ldk => {
-            let ldk = Arc::new(ln_rs::Ldk::new().await?);
+            LnBackend::Greenlight => {
+                // Greenlight::recover().await.unwrap();
+                // TODO: get this from db
+                let last_pay_index = None;
 
-            let node_manager = if settings.node_manager.is_some()
-                && settings.node_manager.as_ref().unwrap().enable_node_manager
-            {
-                Some(ln_rs::node_manager::Nodemanger::Ldk(ldk.clone()))
-            } else {
-                None
-            };
+                let gln = match args.recover {
+                    Some(seed) => Arc::new(Greenlight::recover(&seed, last_pay_index).await?),
+                    None => {
+                        let invite_code = settings.ln.greenlight_invite_code.clone();
 
-            Ln {
-                ln_processor: ldk,
-                node_manager,
+                        Arc::new(Greenlight::new(invite_code).await?)
+                    }
+                };
+
+                let node_manager = if settings.node_manager.is_some()
+                    && settings.node_manager.as_ref().unwrap().enable_node_manager
+                {
+                    Some(ln_rs::node_manager::Nodemanger::Greenlight(gln.clone()))
+                } else {
+                    None
+                };
+
+                Ln {
+                    ln_processor: gln,
+                    node_manager,
+                }
             }
-        }
+            LnBackend::Ldk => {
+                let ldk = Arc::new(ln_rs::Ldk::new().await?);
+
+                let node_manager = if settings.node_manager.is_some()
+                    && settings.node_manager.as_ref().unwrap().enable_node_manager
+                {
+                    Some(ln_rs::node_manager::Nodemanger::Ldk(ldk.clone()))
+                } else {
+                    None
+                };
+
+                Ln {
+                    ln_processor: ldk,
+                    node_manager,
+                }
+            }
+        };
+    */
+
+    let cln_socket = utils::expand_path(
+        settings
+            .ln
+            .cln_path
+            .clone()
+            .ok_or(anyhow!("cln socket not defined"))?
+            .to_str()
+            .ok_or(anyhow!("cln socket not defined"))?,
+    )
+    .ok_or(anyhow!("cln socket not defined"))?;
+    // TODO: get this from db
+
+    let last_pay_index = db.get_last_pay_index().await?;
+
+    let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
+
+    let ln = Ln {
+        ln_processor: Arc::new(cln.clone()),
+    };
+
+    let nodemanger = ln_rs::node_manager::NodeManger {
+        ln: Arc::new(Box::new(cln)),
+        authorized_users: HashSet::new(),
+        jwt_secret: "secret".to_string(),
     };
 
     let ln_clone = ln.clone();
@@ -207,7 +233,6 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let mint_info = MintInfo::from(settings.mint_info.clone());
-    let ln_clone = ln.clone();
 
     let settings_clone = settings.clone();
 
@@ -222,10 +247,8 @@ async fn main() -> anyhow::Result<()> {
         let node_manager_settings = settings_clone.node_manager.unwrap();
         tokio::spawn(async move {
             loop {
-                if let Err(err) = ln_clone
+                if let Err(err) = nodemanger
                     .clone()
-                    .node_manager
-                    .unwrap()
                     .start_server(
                         &node_manager_settings.listen_host,
                         node_manager_settings.listen_port,
@@ -536,8 +559,8 @@ async fn post_melt(
     let melt_response = mint
         .process_melt_request(
             &payload,
-            &pay_res.0,
-            ln_rs_amount_to_cashu_crab_amount(pay_res.1),
+            &pay_res.payment_preimage.unwrap_or("".to_string()),
+            ln_rs_amount_to_cashu_crab_amount(pay_res.total_spent),
         )
         .map_err(|err| {
             warn!("{}", err);
