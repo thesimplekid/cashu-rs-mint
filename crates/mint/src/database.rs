@@ -1,17 +1,19 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 use std::str::FromStr;
-use std::{fs, path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use cashu_sdk::nuts::nut00::Proofs;
 use cashu_sdk::nuts::nut02::Id;
 use cashu_sdk::secret::Secret;
 use cashu_sdk::{Amount, Sha256};
+use ln_rs::InvoiceInfo;
 use redb::{Database, ReadableTable, TableDefinition};
 use tokio::sync::Mutex;
 
 use crate::types::KeysetInfo;
-use ln_rs::InvoiceInfo;
 
 // Key: KeysetId
 // Value: Keyset

@@ -10,12 +10,14 @@ use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
+use crate::components::balance::Balance;
+use crate::components::cashu::Cashu;
+use crate::components::channels::Channels;
+use crate::components::ln::Ln;
+use crate::components::login::Login;
 use crate::components::manager_url::SetManagerUrl;
+use crate::components::on_chain::OnChain;
 use crate::utils::ln_rs_amount_to_cashu_crab_amount;
-
-use crate::components::{
-    balance::Balance, cashu::Cashu, channels::Channels, ln::Ln, login::Login, on_chain::OnChain,
-};
 
 pub const NODE_URL_KEY: &str = "node_url";
 

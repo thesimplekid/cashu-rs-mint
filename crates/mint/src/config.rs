@@ -26,11 +26,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-    str::FromStr,
-};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use cashu_sdk::Amount;
 use config::{Config, ConfigError, File};

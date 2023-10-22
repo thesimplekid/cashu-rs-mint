@@ -1,8 +1,7 @@
 use anyhow::Result;
 use bitcoin::secp256k1::PublicKey;
 use gloo_net::http::Request;
-use ln_rs_models::Amount;
-use ln_rs_models::{requests, ChannelStatus};
+use ln_rs_models::{requests, Amount, ChannelStatus};
 use serde_json::Value;
 use url::Url;
 use yew::platform::spawn_local;

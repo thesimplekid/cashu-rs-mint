@@ -9,10 +9,9 @@ use url::Url;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
-use crate::components::connect_peer::ConnectPeer;
-
 use super::channel::Channel;
 use super::open_channel::OpenChannel;
+use crate::components::connect_peer::ConnectPeer;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct Props {

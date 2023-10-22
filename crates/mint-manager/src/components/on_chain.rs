@@ -1,7 +1,8 @@
 use anyhow::Result;
 use cashu_sdk::Amount;
 use gloo_net::http::Request;
-use ln_rs_models::{requests::PayOnChainRequest, responses::FundingAddressResponse};
+use ln_rs_models::requests::PayOnChainRequest;
+use ln_rs_models::responses::FundingAddressResponse;
 use url::Url;
 use web_sys::HtmlInputElement;
 use yew::platform::spawn_local;
