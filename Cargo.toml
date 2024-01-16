@@ -1,3 +1,4 @@
+profile = {}
 [package]
 name = "cashu-rs-mint"
 version = "0.1.0"
