@@ -26,26 +26,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use cashu_sdk::nuts::MintInfo;
 use cashu_sdk::Amount;
 use config::{Config, ConfigError, File};
 use nostr::key::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct MintInfo {
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub description: Option<String>,
-    pub description_long: Option<String>,
-    pub contact: Option<HashMap<String, String>>,
-    pub nuts: Option<Vec<String>>,
-    pub motd: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Info {

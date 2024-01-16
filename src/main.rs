@@ -1,52 +1,41 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use axum::extract::{Query, State};
+use axum::extract::{Json, Path, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
 };
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use axum::{Json, Router};
-use bitcoin_hashes::{sha256, Hash};
+use axum::Router;
+use bip39::Mnemonic;
 use cashu_sdk::amount::Amount;
-use cashu_sdk::mint::Mint;
-use cashu_sdk::nuts::nut01::Keys;
-use cashu_sdk::nuts::nut02::mint::KeySet;
+use cashu_sdk::mint::{Mint, RedbLocalStore};
 use cashu_sdk::nuts::nut02::Id;
-use cashu_sdk::nuts::nut03::RequestMintResponse;
-use cashu_sdk::nuts::nut04::{MintRequest, PostMintResponse};
-use cashu_sdk::nuts::nut05::{CheckFeesRequest, CheckFeesResponse};
-use cashu_sdk::nuts::nut06::{SplitRequest, SplitResponse};
-use cashu_sdk::nuts::nut07::{CheckSpendableRequest, CheckSpendableResponse};
-use cashu_sdk::nuts::nut08::{MeltRequest, MeltResponse};
-use cashu_sdk::nuts::nut09::MintVersion;
-use cashu_sdk::nuts::*;
-use cashu_sdk::{Bolt11Invoice, Sha256};
+use cashu_sdk::nuts::{
+    CheckStateRequest, CheckStateResponse, MeltBolt11Request, MeltBolt11Response,
+    MintBolt11Request, MintBolt11Response, SwapRequest, SwapResponse, *,
+};
+use cashu_sdk::types::MintQuote;
 use clap::Parser;
 use futures::StreamExt;
-use ln_rs::cln::fee_reserve;
-use ln_rs::{InvoiceStatus, InvoiceTokenStatus, Ln};
-use serde::{Deserialize, Serialize};
+use ln_rs::Ln;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn};
-use types::KeysetInfo;
-use utils::{cashu_crab_amount_to_ln_rs_amount, ln_rs_amount_to_cashu_crab_amount, unix_time};
+use tracing::warn;
+use utils::unix_time;
 
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 use crate::cli::CLIArgs;
-use crate::database::Db;
 use crate::error::Error;
 
 mod cli;
 mod config;
-mod database;
 mod error;
 mod types;
 mod utils;
@@ -72,47 +61,18 @@ async fn main() -> anyhow::Result<()> {
         None => settings.info.clone().db_path,
     };
 
-    let db = Db::new(db_path).await.unwrap();
-
-    let all_keysets = db.get_all_keyset_info().await?;
-
-    let inactive_keysets: HashMap<Id, nut02::mint::KeySet> = all_keysets
-        .iter()
-        // FIXME: Handle unwrap
-        // TODO: Should check that ID matches
-        .map(|(k, v)| {
-            (
-                Id::try_from_base64(k).unwrap(),
-                KeySet::generate(&v.secret, &v.derivation_path, v.max_order),
-            )
-        })
-        .collect();
-
-    let spent_secrets = db.get_spent_secrets().await?;
+    let localstore = RedbLocalStore::new(db_path.to_str().unwrap())?;
+    let s = "";
+    let mnemonic = Mnemonic::from_str("")?;
 
     let mint = Mint::new(
-        &settings.info.secret_key,
-        &settings.info.derivation_path,
-        inactive_keysets,
-        spent_secrets,
-        settings.info.max_order,
-        settings.info.min_fee_reserve,
-        settings.info.min_fee_percent,
-    );
-
-    let keyset = mint.active_keyset();
-    db.set_active_keyset(&keyset.id).await?;
-    let keyset_info = KeysetInfo {
-        valid_from: unix_time(),
-        valid_to: None,
-        id: keyset.id,
-        secret: settings.info.secret_key.clone(),
-        derivation_path: settings.info.derivation_path.clone(),
-        max_order: settings.info.max_order,
-    };
-    db.add_keyset(&keyset_info).await?;
-
-    let mint = Arc::new(Mutex::new(mint));
+        Arc::new(localstore),
+        mnemonic,
+        HashSet::new(),
+        Amount::ZERO,
+        0.0,
+    )
+    .await?;
 
     /*
         let ln = match &settings.ln.ln_backend {
@@ -204,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
     .ok_or(anyhow!("cln socket not defined"))?;
     // TODO: get this from db
 
-    let last_pay_index = db.get_last_pay_index().await?;
+    let last_pay_index = 0;
 
     let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
 
@@ -212,21 +172,17 @@ async fn main() -> anyhow::Result<()> {
         ln_processor: Arc::new(cln.clone()),
     };
 
-    let nodemanger = ln_rs::node_manager::NodeManger {
-        ln: Arc::new(Box::new(cln)),
-        authorized_users: HashSet::new(),
-        jwt_secret: "secret".to_string(),
-    };
-
     let ln_clone = ln.clone();
-    let db_clone = db.clone();
+    let mint_clone = Arc::new(mint.clone());
 
     tokio::spawn(async move {
         loop {
             let mut stream = ln_clone.ln_processor.wait_invoice().await.unwrap();
 
             while let Some((invoice, pay_index)) = stream.next().await {
-                if let Err(err) = handle_paid_invoice(&db_clone, invoice, pay_index).await {
+                if let Err(err) =
+                    handle_paid_invoice(mint_clone.clone(), &invoice.to_string()).await
+                {
                     warn!("{:?}", err);
                 }
             }
@@ -237,49 +193,31 @@ async fn main() -> anyhow::Result<()> {
 
     let settings_clone = settings.clone();
 
-    if settings_clone.node_manager.is_some()
-        && settings_clone
-            .node_manager
-            .as_ref()
-            .unwrap()
-            .enable_node_manager
-            .eq(&true)
-    {
-        let node_manager_settings = settings_clone.node_manager.unwrap();
-        tokio::spawn(async move {
-            loop {
-                if let Err(err) = nodemanger
-                    .clone()
-                    .start_server(
-                        &node_manager_settings.listen_host,
-                        node_manager_settings.listen_port,
-                        node_manager_settings.authorized_users.clone(),
-                        &node_manager_settings.jwt_secret,
-                    )
-                    .await
-                {
-                    warn!("{:?}", err)
-                }
-            }
-        });
-    }
     let state = MintState {
-        db,
         ln,
-        mint,
+        mint: Arc::new(Mutex::new(mint)),
         mint_info,
     };
 
     let mint_service = Router::new()
-        .route("/keys", get(get_keys))
-        .route("/keysets", get(get_keysets))
-        .route("/mint", get(get_request_mint))
-        .route("/mint", post(post_mint))
-        .route("/checkfees", post(post_check_fee))
-        .route("/split", post(post_split))
-        .route("/check", post(post_check))
-        .route("/melt", post(post_melt))
-        .route("/info", get(get_info))
+        .route("/v1/keys", get(get_keys))
+        .route("/v1/keysets", get(get_keysets))
+        .route("/v1/keys/:keyset_id", get(get_keyset_pubkeys))
+        .route("/v1/swap", post(post_swap))
+        .route("/v1/mint/quote/bolt11", get(get_mint_bolt11_quote))
+        .route(
+            "/v1/mint/quote/bolt11/:quote_id",
+            get(get_check_mint_bolt11_quote),
+        )
+        .route("/v1/mint/bolt11", post(post_mint_bolt11))
+        .route("/v1/melt/quote/bolt11", get(get_melt_bolt11_quote))
+        .route(
+            "/v1/melt/quote/bolt11/:quote_id",
+            get(get_check_melt_bolt11_quote),
+        )
+        .route("/v1/melt/bolt11", post(post_melt_bolt11))
+        .route("/v1/checkstate", post(post_check))
+        .route("/v1/info", get(get_mint_info))
         .layer(CorsLayer::very_permissive().allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
@@ -300,23 +238,23 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_paid_invoice(
-    db: &Db,
-    invoice: Bolt11Invoice,
-    last_pay_index: Option<u64>,
-) -> anyhow::Result<()> {
-    if let Some(pay_index) = last_pay_index {
-        db.set_last_pay_index(pay_index).await?;
+async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> anyhow::Result<()> {
+    let quotes: Vec<MintQuote> = mint.mint_quotes().await?;
+
+    for quote in quotes {
+        if quote.request.eq(request) {
+            let q = MintQuote {
+                id: quote.id,
+                amount: quote.amount,
+                unit: quote.unit,
+                request: quote.request,
+                paid: true,
+                expiry: quote.expiry,
+            };
+
+            mint.update_mint_quote(q).await?;
+        }
     }
-
-    let payment_hash = Sha256::from_str(&invoice.payment_hash().to_string())?;
-
-    let mut invoice_info = db.get_invoice_info_by_payment_hash(&payment_hash).await?;
-
-    invoice_info.status = InvoiceStatus::Paid;
-    invoice_info.confirmed_at = Some(unix_time());
-
-    db.add_invoice(&invoice_info).await?;
 
     Ok(())
 }
@@ -324,68 +262,179 @@ async fn handle_paid_invoice(
 #[derive(Clone)]
 struct MintState {
     ln: Ln,
-    db: Db,
     mint: Arc<Mutex<Mint>>,
     mint_info: MintInfo,
 }
 
-async fn get_keys(State(state): State<MintState>) -> Result<Json<Keys>, StatusCode> {
-    let mint = state.mint.lock().await;
+async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, StatusCode> {
+    let pubkeys = state.mint.lock().await.pubkeys().await.unwrap();
 
-    let keys = mint.active_keyset_pubkeys();
-
-    Ok(Json(keys.keys))
+    Ok(Json(pubkeys))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RequestMintParams {
-    amount: Amount,
+async fn get_keyset_pubkeys(
+    State(state): State<MintState>,
+    Path(keyset_id): Path<Id>,
+) -> Result<Json<KeysResponse>, StatusCode> {
+    let pubkeys = state
+        .mint
+        .lock()
+        .await
+        .keyset_pubkeys(&keyset_id)
+        .await
+        .unwrap()
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(pubkeys))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct MintParams {
-    hash: Option<Sha256>,
-    payment_hash: Option<Sha256>,
+async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeysetResponse>, StatusCode> {
+    let mint = state.mint.lock().await.keysets().await.unwrap();
+
+    Ok(Json(mint))
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct MintInfo {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    version: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    description_long: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    contact: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    nuts: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    motd: Option<String>,
+async fn get_mint_bolt11_quote(
+    State(state): State<MintState>,
+    Json(payload): Json<MintQuoteBolt11Request>,
+) -> Result<Json<MintQuoteBolt11Response>, StatusCode> {
+    let invoice = state
+        .ln
+        .ln_processor
+        .create_invoice(
+            ln_rs::Amount::from_sat(u64::from(payload.amount)),
+            "".to_string(),
+        )
+        .await
+        .unwrap();
+
+    let quote = state
+        .mint
+        .lock()
+        .await
+        .new_mint_quote(
+            invoice.to_string(),
+            payload.unit,
+            payload.amount,
+            unix_time() + 120,
+        )
+        .await
+        .unwrap();
+
+    Ok(Json(quote.into()))
 }
 
-impl From<config::MintInfo> for MintInfo {
-    fn from(info: config::MintInfo) -> Self {
-        Self {
-            name: info.name,
-            version: info.version,
-            description: info.description,
-            description_long: info.description_long,
-            contact: info.contact,
-            nuts: info.nuts,
-            motd: info.motd,
-        }
-    }
+async fn get_check_mint_bolt11_quote(
+    State(state): State<MintState>,
+    Path(quote_id): Path<String>,
+) -> Result<Json<MintQuoteBolt11Response>, StatusCode> {
+    let quote = state
+        .mint
+        .lock()
+        .await
+        .check_mint_quote(&quote_id)
+        .await
+        .unwrap();
+
+    Ok(Json(quote))
 }
 
-async fn get_keysets(State(state): State<MintState>) -> Result<Json<nut02::Response>, StatusCode> {
-    let mint = state.mint.lock().await;
+async fn post_mint_bolt11(
+    State(state): State<MintState>,
+    Json(payload): Json<MintBolt11Request>,
+) -> Result<Json<MintBolt11Response>, StatusCode> {
+    let res = state
+        .mint
+        .lock()
+        .await
+        .process_mint_request(payload)
+        .await
+        .unwrap();
 
-    Ok(Json(mint.keysets()))
+    Ok(Json(res))
 }
 
+async fn get_melt_bolt11_quote(
+    State(state): State<MintState>,
+    Json(payload): Json<MeltQuoteBolt11Request>,
+) -> Result<Json<MeltQuoteBolt11Response>, StatusCode> {
+    let amount = payload.request.amount_milli_satoshis().unwrap() / 1000;
+    let quote = state
+        .mint
+        .lock()
+        .await
+        .new_melt_quote(
+            payload.request.to_string(),
+            payload.unit,
+            Amount::from(amount),
+            Amount::ZERO,
+            unix_time() + 1800,
+        )
+        .await
+        .unwrap();
+
+    Ok(Json(quote.into()))
+}
+
+async fn get_check_melt_bolt11_quote(
+    State(state): State<MintState>,
+    Path(quote_id): Path<String>,
+) -> Result<Json<MeltQuoteBolt11Response>, StatusCode> {
+    let quote = state
+        .mint
+        .lock()
+        .await
+        .check_melt_quote(&quote_id)
+        .await
+        .unwrap();
+
+    Ok(Json(quote))
+}
+
+async fn post_melt_bolt11(
+    State(state): State<MintState>,
+    Json(payload): Json<MeltBolt11Request>,
+) -> Result<Json<MeltBolt11Response>, StatusCode> {
+    let preimage = "";
+    let res = state
+        .mint
+        .lock()
+        .await
+        .process_melt_request(&payload, preimage, Amount::ZERO)
+        .await
+        .unwrap();
+
+    Ok(Json(res))
+}
+
+async fn post_check(
+    State(state): State<MintState>,
+    Json(payload): Json<CheckStateRequest>,
+) -> Result<Json<CheckStateResponse>, Error> {
+    let state = state.mint.lock().await.check_state(&payload).await.unwrap();
+
+    Ok(Json(state))
+}
+
+async fn get_mint_info(State(state): State<MintState>) -> Result<Json<MintInfo>, Error> {
+    Ok(Json(state.mint.lock().await.mint_info().await.unwrap()))
+}
+
+async fn post_swap(
+    State(state): State<MintState>,
+    Json(payload): Json<SwapRequest>,
+) -> Result<Json<SwapResponse>, Error> {
+    let swap_response = state
+        .mint
+        .lock()
+        .await
+        .process_swap_request(payload)
+        .await
+        .unwrap();
+    Ok(Json(swap_response))
+}
+
+/*
 async fn get_request_mint(
     State(state): State<MintState>,
     Query(params): Query<RequestMintParams>,
@@ -512,29 +561,6 @@ async fn post_check_fee(
     Ok(Json(CheckFeesResponse { fee }))
 }
 
-async fn post_split(
-    State(state): State<MintState>,
-    Json(payload): Json<SplitRequest>,
-) -> Result<Json<SplitResponse>, Error> {
-    let mut mint = state.mint.lock().await;
-
-    let proofs = payload.proofs.clone();
-
-    match mint.process_split_request(payload) {
-        Ok(split_response) => {
-            state.db.add_used_proofs(&proofs).await.map_err(|err| {
-                warn!("Could not add used proofs {:?}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
-            Ok(Json(split_response))
-        }
-        Err(err) => {
-            warn!("{}", err);
-            Err(StatusCode::INTERNAL_SERVER_ERROR.into())
-        }
-    }
-}
 
 async fn post_melt(
     State(state): State<MintState>,
@@ -637,3 +663,4 @@ async fn get_info(State(state): State<MintState>) -> Result<Json<nut09::MintInfo
 
     Ok(Json(mint_info))
 }
+*/
