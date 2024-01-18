@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fs;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -14,7 +15,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
 use cashu_sdk::amount::Amount;
-use cashu_sdk::mint::{Mint, RedbLocalStore};
+use cashu_sdk::mint::{LocalStore, Mint, RedbLocalStore};
 use cashu_sdk::nuts::nut02::Id;
 use cashu_sdk::nuts::{
     CheckStateRequest, CheckStateResponse, MeltBolt11Request, MeltBolt11Response,
@@ -62,8 +63,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let localstore = RedbLocalStore::new(db_path.to_str().unwrap())?;
-    let s = "";
-    let mnemonic = Mnemonic::from_str("")?;
+    let mint_info = settings.mint_info.clone();
+    localstore.set_mint_info(&mint_info).await?;
+
+    let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
 
     let mint = Mint::new(
         Arc::new(localstore),
@@ -73,84 +76,6 @@ async fn main() -> anyhow::Result<()> {
         0.0,
     )
     .await?;
-
-    /*
-        let ln = match &settings.ln.ln_backend {
-            LnBackend::Cln => {
-                let cln_socket = utils::expand_path(
-                    settings
-                        .ln
-                        .cln_path
-                        .clone()
-                        .ok_or(anyhow!("cln socket not defined"))?
-                        .to_str()
-                        .ok_or(anyhow!("cln socket not defined"))?,
-                )
-                .ok_or(anyhow!("cln socket not defined"))?;
-                // TODO: get this from db
-
-                let last_pay_index = db.get_last_pay_index().await?;
-
-                let cln = Arc::new(ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?);
-
-                let node_manager = if settings.node_manager.is_some()
-                    && settings.node_manager.as_ref().unwrap().enable_node_manager
-                {
-                    Some(ln_rs::node_manager::NodeManger(cln.clone()))
-                } else {
-                    None
-                };
-
-                Ln {
-                    ln_processor: cln,
-                    node_manager,
-                }
-            }
-            LnBackend::Greenlight => {
-                // Greenlight::recover().await.unwrap();
-                // TODO: get this from db
-                let last_pay_index = None;
-
-                let gln = match args.recover {
-                    Some(seed) => Arc::new(Greenlight::recover(&seed, last_pay_index).await?),
-                    None => {
-                        let invite_code = settings.ln.greenlight_invite_code.clone();
-
-                        Arc::new(Greenlight::new(invite_code).await?)
-                    }
-                };
-
-                let node_manager = if settings.node_manager.is_some()
-                    && settings.node_manager.as_ref().unwrap().enable_node_manager
-                {
-                    Some(ln_rs::node_manager::Nodemanger::Greenlight(gln.clone()))
-                } else {
-                    None
-                };
-
-                Ln {
-                    ln_processor: gln,
-                    node_manager,
-                }
-            }
-            LnBackend::Ldk => {
-                let ldk = Arc::new(ln_rs::Ldk::new().await?);
-
-                let node_manager = if settings.node_manager.is_some()
-                    && settings.node_manager.as_ref().unwrap().enable_node_manager
-                {
-                    Some(ln_rs::node_manager::Nodemanger::Ldk(ldk.clone()))
-                } else {
-                    None
-                };
-
-                Ln {
-                    ln_processor: ldk,
-                    node_manager,
-                }
-            }
-        };
-    */
 
     let cln_socket = utils::expand_path(
         settings
@@ -162,9 +87,12 @@ async fn main() -> anyhow::Result<()> {
             .ok_or(anyhow!("cln socket not defined"))?,
     )
     .ok_or(anyhow!("cln socket not defined"))?;
-    // TODO: get this from db
 
-    let last_pay_index = 0;
+    let last_pay_path = settings.info.last_pay_path.clone();
+
+    let last_pay = fs::read(settings.info.last_pay_path.clone())?;
+
+    let last_pay_index = u64::from_be_bytes(last_pay.try_into().unwrap());
 
     let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
 
@@ -185,18 +113,18 @@ async fn main() -> anyhow::Result<()> {
                 {
                     warn!("{:?}", err);
                 }
+                if let Some(pay_index) = pay_index {
+                    if let Err(err) = fs::write(last_pay_path.clone(), pay_index.to_be_bytes()) {
+                        warn!("Could not write last pay index {:?}", err);
+                    }
+                }
             }
         }
     });
 
-    let mint_info = MintInfo::from(settings.mint_info.clone());
-
-    let settings_clone = settings.clone();
-
     let state = MintState {
         ln,
         mint: Arc::new(Mutex::new(mint)),
-        mint_info,
     };
 
     let mint_service = Router::new()
@@ -263,7 +191,6 @@ async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> anyhow::Result<(
 struct MintState {
     ln: Ln,
     mint: Arc<Mutex<Mint>>,
-    mint_info: MintInfo,
 }
 
 async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, StatusCode> {
@@ -433,234 +360,3 @@ async fn post_swap(
         .unwrap();
     Ok(Json(swap_response))
 }
-
-/*
-async fn get_request_mint(
-    State(state): State<MintState>,
-    Query(params): Query<RequestMintParams>,
-) -> Result<Json<RequestMintResponse>, Error> {
-    let amount = params.amount;
-
-    let hash = sha256::Hash::hash(&cashu_sdk::utils::random_hash());
-
-    let invoice = state
-        .ln
-        .ln_processor
-        .get_invoice(cashu_crab_amount_to_ln_rs_amount(amount), hash, "")
-        .await
-        .map_err(|err| {
-            warn!("{}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    state.db.add_invoice(&invoice).await.unwrap();
-    Ok(Json(RequestMintResponse {
-        hash: hash.to_string(),
-        pr: invoice.invoice,
-    }))
-}
-
-async fn post_mint(
-    State(state): State<MintState>,
-    Query(params): Query<MintParams>,
-    Json(payload): Json<MintRequest>,
-) -> Result<Json<PostMintResponse>, Error> {
-    let hash = match params.hash {
-        Some(hash) => hash,
-        None => match params.payment_hash {
-            Some(hash) => hash,
-            None => return Err(StatusCode::BAD_REQUEST.into()),
-        },
-    };
-
-    let db = state.db;
-    let invoice = db
-        .get_invoice_info(&hash)
-        .await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
-
-    // debug!("{:?}", invoice);
-
-    if invoice.amount != cashu_crab_amount_to_ln_rs_amount(payload.total_amount()) {
-        return Err(Error::InvoiceNotPaid);
-    }
-
-    match invoice.status {
-        InvoiceStatus::Paid => {}
-        InvoiceStatus::Unpaid => {
-            debug!("Checking");
-            state
-                .ln
-                .ln_processor
-                .check_invoice_status(&invoice.payment_hash)
-                .await
-                .unwrap();
-            let invoice = db.get_invoice_info(&hash).await.unwrap();
-
-            match invoice.status {
-                InvoiceStatus::Unpaid => return Err(Error::InvoiceNotPaid),
-                InvoiceStatus::Expired => return Err(Error::InvoiceExpired),
-                _ => (),
-            }
-
-            debug!("Unpaid check: {:?}", invoice.status);
-        }
-        InvoiceStatus::Expired => {
-            return Err(Error::InvoiceExpired);
-        }
-        InvoiceStatus::InFlight => {}
-    }
-
-    let mut mint = state.mint.lock().await;
-
-    let res = match mint.process_mint_request(payload) {
-        Ok(mint_res) => {
-            let mut invoice = db.get_invoice_info(&hash).await.map_err(|err| {
-                warn!("{}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-            invoice.token_status = InvoiceTokenStatus::Issued;
-
-            db.add_invoice(&invoice).await.map_err(|err| {
-                warn!("{}", err);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-            let in_circulation = db.get_in_circulation().await.unwrap()
-                + ln_rs_amount_to_cashu_crab_amount(invoice.amount);
-
-            db.set_in_circulation(&in_circulation).await.ok();
-
-            mint_res
-        }
-        Err(err) => match db.get_invoice_info(&hash).await {
-            Ok(_) => {
-                warn!("{}", err);
-                return Err(Error::InvoiceNotPaid);
-            }
-            Err(err) => {
-                warn!("{}", err);
-                return Err(StatusCode::NOT_FOUND.into());
-            }
-        },
-    };
-
-    Ok(Json(res))
-}
-
-async fn post_check_fee(
-    Json(payload): Json<CheckFeesRequest>,
-) -> Result<Json<CheckFeesResponse>, Error> {
-    // let invoice = LnInvoice::from_str(&payload.pr)?;
-
-    let amount_msat = payload.pr.amount_milli_satoshis().unwrap();
-    let amount_sat = amount_msat / 1000;
-    let amount = Amount::from(amount_sat);
-
-    let fee =
-        ln_rs_amount_to_cashu_crab_amount(fee_reserve(cashu_crab_amount_to_ln_rs_amount(amount)));
-
-    Ok(Json(CheckFeesResponse { fee }))
-}
-
-
-async fn post_melt(
-    State(state): State<MintState>,
-    Json(payload): Json<MeltRequest>,
-) -> Result<Json<MeltResponse>, Error> {
-    let mut mint = state.mint.lock().await;
-    mint.verify_melt_request(&payload).map_err(|err| {
-        warn!("{}", err);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Pay ln
-    let pay_res = state
-        .ln
-        .ln_processor
-        .pay_invoice(payload.pr.clone(), None)
-        .await
-        .map_err(|err| {
-            warn!("{}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let melt_response = mint
-        .process_melt_request(
-            &payload,
-            &pay_res.payment_preimage.unwrap_or("".to_string()),
-            ln_rs_amount_to_cashu_crab_amount(pay_res.total_spent),
-        )
-        .map_err(|err| {
-            warn!("{}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    state
-        .db
-        .add_used_proofs(&payload.proofs)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let in_circulation = state.db.get_in_circulation().await.unwrap();
-
-    let in_circulation = in_circulation - payload.proofs_amount() + melt_response.change_amount();
-
-    state.db.set_in_circulation(&in_circulation).await.unwrap();
-
-    // Process mint request
-    Ok(Json(melt_response))
-}
-
-async fn post_check(
-    State(state): State<MintState>,
-    Json(payload): Json<CheckSpendableRequest>,
-) -> Result<Json<CheckSpendableResponse>, Error> {
-    let mint = state.mint.lock().await;
-
-    Ok(Json(mint.check_spendable(&payload).map_err(|err| {
-        warn!("{}", err);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?))
-}
-
-async fn get_info(State(state): State<MintState>) -> Result<Json<nut09::MintInfo>, Error> {
-    // TODO:
-    let nuts = vec![
-        "NUT-07".to_string(),
-        "NUT-08".to_string(),
-        "NUT-09".to_string(),
-    ];
-
-    let mint_version = MintVersion {
-        name: "cashu-rs-mint".to_string(),
-        version: CARGO_PKG_VERSION
-            .map(std::borrow::ToOwned::to_owned)
-            .unwrap_or("".to_string()),
-    };
-
-    let contact: Vec<Vec<String>> = state
-        .mint_info
-        .contact
-        .iter()
-        .map(|inner_map| {
-            inner_map
-                .iter()
-                .flat_map(|(k, v)| vec![k.clone(), v.clone()])
-                .collect()
-        })
-        .collect();
-
-    let mint_info = nut09::MintInfo {
-        name: state.mint_info.name,
-        // TODO:
-        pubkey: None,
-        version: Some(mint_version),
-        description: state.mint_info.description,
-        description_long: state.mint_info.description_long,
-        contact: Some(contact),
-        nuts,
-        motd: state.mint_info.motd,
-    };
-
-    Ok(Json(mint_info))
-}
-*/

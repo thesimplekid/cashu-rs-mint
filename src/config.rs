@@ -26,14 +26,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use cashu_sdk::nuts::MintInfo;
 use cashu_sdk::Amount;
 use config::{Config, ConfigError, File};
-use nostr::key::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -42,9 +40,11 @@ pub struct Info {
     pub url: String,
     #[serde(default = "path_default")]
     pub db_path: PathBuf,
+    #[serde(default = "last_pay_path")]
+    pub last_pay_path: String,
     pub listen_host: String,
     pub listen_port: u16,
-    pub secret_key: String,
+    pub mnemonic: String,
     #[serde(default = "derivation_path_default")]
     pub derivation_path: String,
     #[serde(default = "max_order_default")]
@@ -63,6 +63,10 @@ fn derivation_path_default() -> String {
 
 fn max_order_default() -> u8 {
     32
+}
+
+fn last_pay_path() -> String {
+    "./last_path".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -84,20 +88,10 @@ pub struct Ln {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct NodeManager {
-    pub enable_node_manager: bool,
-    pub authorized_users: HashSet<XOnlyPublicKey>,
-    pub jwt_secret: String,
-    pub listen_host: String,
-    pub listen_port: u16,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub info: Info,
     pub mint_info: MintInfo,
     pub ln: Ln,
-    pub node_manager: Option<NodeManager>,
 }
 
 impl Settings {
