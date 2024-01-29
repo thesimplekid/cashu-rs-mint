@@ -90,7 +90,7 @@ pub struct Ln {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub info: Info,
-    pub mint_info: MintInfo,
+    //    pub mint_info: MintInfo,
     pub ln: Ln,
 }
 

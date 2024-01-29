@@ -27,7 +27,7 @@ use futures::StreamExt;
 use ln_rs::Ln;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
-use tracing::warn;
+use tracing::{debug, warn};
 use utils::unix_time;
 
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -55,6 +55,8 @@ async fn main() -> anyhow::Result<()> {
         None => "./config.toml".to_string(),
     };
 
+    debug!("Path: {}", config_file_arg);
+
     let settings = config::Settings::new(&Some(config_file_arg));
 
     let db_path = match args.db {
@@ -63,7 +65,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let localstore = RedbLocalStore::new(db_path.to_str().unwrap())?;
-    let mint_info = settings.mint_info.clone();
+    let mint_info = MintInfo::default();
+    //settings.mint_info.clone();
     localstore.set_mint_info(&mint_info).await?;
 
     let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
@@ -76,6 +79,8 @@ async fn main() -> anyhow::Result<()> {
         0.0,
     )
     .await?;
+
+    println!("Mint created");
 
     let cln_socket = utils::expand_path(
         settings
@@ -90,9 +95,17 @@ async fn main() -> anyhow::Result<()> {
 
     let last_pay_path = settings.info.last_pay_path.clone();
 
-    let last_pay = fs::read(settings.info.last_pay_path.clone())?;
+    let last_pay_path = "./last_pay";
+    println!("last pay path: {}", last_pay_path);
 
-    let last_pay_index = u64::from_be_bytes(last_pay.try_into().unwrap());
+    let last_pay = fs::read(last_pay_path)?;
+
+    let last_pay_index =
+        u64::from_be_bytes(last_pay.try_into().unwrap_or([0, 0, 0, 0, 0, 0, 0, 0]));
+
+    println!("last pay index: {}", last_pay_index);
+
+    println!("cln: {}", cln_socket.display());
 
     let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
 
@@ -132,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/keysets", get(get_keysets))
         .route("/v1/keys/:keyset_id", get(get_keyset_pubkeys))
         .route("/v1/swap", post(post_swap))
-        .route("/v1/mint/quote/bolt11", get(get_mint_bolt11_quote))
+        .route("/v1/mint/quote/bolt11", post(get_mint_bolt11_quote))
         .route(
             "/v1/mint/quote/bolt11/:quote_id",
             get(get_check_mint_bolt11_quote),
@@ -232,8 +245,11 @@ async fn get_mint_bolt11_quote(
             ln_rs::Amount::from_sat(u64::from(payload.amount)),
             "".to_string(),
         )
-        .await
-        .unwrap();
+        .await;
+
+    println!("Invoice {:?}", invoice);
+
+    let invoice = invoice.unwrap();
 
     let quote = state
         .mint
