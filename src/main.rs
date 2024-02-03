@@ -1,5 +1,6 @@
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -93,19 +94,27 @@ async fn main() -> anyhow::Result<()> {
     )
     .ok_or(anyhow!("cln socket not defined"))?;
 
-    let last_pay_path = settings.info.last_pay_path.clone();
+    let last_pay_path = PathBuf::from_str(&settings.info.last_pay_path.clone())?;
 
-    let last_pay_path = "./last_pay";
-    println!("last pay path: {}", last_pay_path);
+    match fs::metadata(&last_pay_path) {
+        Ok(_) => (),
+        Err(_e) => {
+            // Create the parent directory if it doesn't exist
+            fs::create_dir_all(&last_pay_path.parent().unwrap())?;
 
-    let last_pay = fs::read(last_pay_path)?;
+            // Attempt to create the file
+            let mut fs = File::create(&last_pay_path).unwrap();
+            fs.write_all(&0_u64.to_be_bytes()).unwrap();
+        }
+    }
+
+    let last_pay = fs::read(&last_pay_path).unwrap();
+
+    println!("last pay {:?}", last_pay);
 
     let last_pay_index =
         u64::from_be_bytes(last_pay.try_into().unwrap_or([0, 0, 0, 0, 0, 0, 0, 0]));
-
-    println!("last pay index: {}", last_pay_index);
-
-    println!("cln: {}", cln_socket.display());
+    println!("last pay index {:?}", last_pay_index);
 
     let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
 
@@ -127,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
                     warn!("{:?}", err);
                 }
                 if let Some(pay_index) = pay_index {
-                    if let Err(err) = fs::write(last_pay_path.clone(), pay_index.to_be_bytes()) {
+                    if let Err(err) = fs::write(&last_pay_path, pay_index.to_be_bytes()) {
                         warn!("Could not write last pay index {:?}", err);
                     }
                 }

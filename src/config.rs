@@ -29,7 +29,6 @@ THE SOFTWARE.
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use cashu_sdk::nuts::MintInfo;
 use cashu_sdk::Amount;
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
@@ -54,7 +53,7 @@ pub struct Info {
 }
 
 fn path_default() -> PathBuf {
-    PathBuf::from_str(".").unwrap()
+    PathBuf::from_str("/tmp/config-rs-mint/cashu-rs-mint.redb").unwrap()
 }
 
 fn derivation_path_default() -> String {
@@ -66,7 +65,7 @@ fn max_order_default() -> u8 {
 }
 
 fn last_pay_path() -> String {
-    "./last_path".to_string()
+    "/tmp/config-rs-mint/last_path".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]

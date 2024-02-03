@@ -4,7 +4,8 @@ listen_host = "127.0.0.1"
 listen_port = 8085
 mnemonic = "inner strategy nasty verify camp bind avoid cause glue holiday dress bounce exotic husband hungry winter diet town spray team number hen upper seek"
 max_order = 32
-db_path = "./mint.redb"
+db_path = "/tmp/cashu-rs-mint/mint.redb"
+last_pay_path = "/tmp/cashu-rs-mint/last_pay.txt"
 
 #[mint_info]
 #name = "test mint"
@@ -21,7 +22,7 @@ email = "me@example.com"
 ln_backend = "Cln"
 
 # CLN
-cln_path = "/home/thesimplekid/Documents/Development/cashu-rs-mint/tmp/ln_1/regtest/lightning-rpc"
+cln_path = "/tmp/cashu-rs-mint/lighting/ln_1/regtest/lightning-rpc"
 
 # Required to start greenlight for the first time
 # greenlight_invite_code = ""
