@@ -48,19 +48,6 @@ pub struct ErrorResponse {
     error: String,
 }
 
-impl ErrorResponse {
-    pub fn new(code: u16, error: &str) -> Self {
-        Self {
-            code,
-            error: error.to_string(),
-        }
-    }
-
-    pub fn as_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-}
-
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         match self {

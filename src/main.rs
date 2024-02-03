@@ -100,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
         Ok(_) => (),
         Err(_e) => {
             // Create the parent directory if it doesn't exist
-            fs::create_dir_all(&last_pay_path.parent().unwrap())?;
+            fs::create_dir_all(last_pay_path.parent().unwrap())?;
 
             // Attempt to create the file
             let mut fs = File::create(&last_pay_path).unwrap();
