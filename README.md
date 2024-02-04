@@ -18,8 +18,55 @@ WIP
 - :heavy_check_mark: [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
 
 
+## Development
 
+```
+nix develop
+```
 
+This will launch a nix shell with a regtest bitcoind node as well as two lightning nodes.
+
+In order to use the node first a channel will need to be opened.
+
+```
+  ln1 newaddr
+  ln2 newaddr
+```
+
+```
+  btc sendtoaddress <ln1 bitcoin address> 100
+  btc sendtoaddress <ln2 bitcoin address> 100
+  btc getnewaddress
+  btc generatetoaddress 50 <btc address>
+```
+
+Connect ln nodes
+```
+  ln2 getinfo
+  ln1 connect <pubkey of ln1> 127.0.0.1 15352
+```
+
+Open a channel from ln1 to ln2
+```
+  ln1 fundchannel id=<pubkey of ln2> amount=10000000
+```
+
+Open a channel from ln2 to ln1
+```
+  ln1 getinfo
+  ln2 fundchannel id=<pubkey of ln1> amount=10000000
+```
+
+Generate blocks to confirm channels
+```
+  btc getnewaddress
+  btc generatetoaddress 50 <btc address>
+```
+
+Start the mint, by default the mint will use ln1
+```
+  cargo r
+```
 
 ## Implemented Lightning Backends
 - :heavy_check_mark: [CLNrpc](https://github.com/ElementsProject/lightning#using-the-json-rpc-interface)

@@ -42,7 +42,7 @@
         blockcount=$(btc getblockcount) || { blockcount=-1; }
         if [[ $blockcount == "-1" ]]; then
           echo "Starting bitcoind"
-          bitcoind -regtest -datadir=${bitcoin_dir} -daemon
+          bitcoind -regtest -datadir=${bitcoin_dir} -fallbackfee=0.01 -daemon
           sleep 1
         else
            echo "bitcoind already started"
