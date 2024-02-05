@@ -25,7 +25,7 @@ use cashu_sdk::nuts::{
 use cashu_sdk::types::MintQuote;
 use clap::Parser;
 use futures::StreamExt;
-use ln_rs::Ln;
+use ln_rs::{Bolt11Invoice, Ln};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, warn};
@@ -160,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
             get(get_check_mint_bolt11_quote),
         )
         .route("/v1/mint/bolt11", post(post_mint_bolt11))
-        .route("/v1/melt/quote/bolt11", get(get_melt_bolt11_quote))
+        .route("/v1/melt/quote/bolt11", post(get_melt_bolt11_quote))
         .route(
             "/v1/melt/quote/bolt11/:quote_id",
             get(get_check_melt_bolt11_quote),
@@ -256,8 +256,6 @@ async fn get_mint_bolt11_quote(
         )
         .await;
 
-    println!("Invoice {:?}", invoice);
-
     let invoice = invoice.unwrap();
 
     let quote = state
@@ -347,12 +345,31 @@ async fn post_melt_bolt11(
     State(state): State<MintState>,
     Json(payload): Json<MeltBolt11Request>,
 ) -> Result<Json<MeltBolt11Response>, StatusCode> {
-    let preimage = "";
+    let quote = state
+        .mint
+        .lock()
+        .await
+        .verify_melt_request(&payload)
+        .await
+        .map_err(|_| StatusCode::NOT_ACCEPTABLE)?;
+
+    let pre = state
+        .ln
+        .ln_processor
+        .pay_invoice(Bolt11Invoice::from_str(&quote.request).unwrap(), None)
+        .await
+        .unwrap();
+
+    let preimage = pre.payment_preimage;
     let res = state
         .mint
         .lock()
         .await
-        .process_melt_request(&payload, preimage, Amount::ZERO)
+        .process_melt_request(
+            &payload,
+            &preimage.unwrap(),
+            Amount::from(pre.total_spent.to_sat()),
+        )
         .await
         .unwrap();
 
