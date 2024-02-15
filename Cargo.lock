@@ -135,7 +135,7 @@ dependencies = [
  "bitflags 1.3.2",
  "bytes",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "hyper",
  "itoa",
@@ -165,7 +165,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "mime",
  "rustversion",
@@ -184,7 +184,7 @@ dependencies = [
  "bytes",
  "cookie",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "mime",
  "pin-project-lite",
@@ -206,7 +206,7 @@ dependencies = [
  "bytes",
  "cookie",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "mime",
  "pin-project-lite",
@@ -398,7 +398,7 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 [[package]]
 name = "cashu"
 version = "0.4.1-ALPHA"
-source = "git+https://github.com/thesimplekid/cashu-crab?rev=c126bba#c126bba961376d055cfc64488a1e16c6fb849cc2"
+source = "git+https://github.com/thesimplekid/cashu-crab?rev=b663228#b663228cd2ba0015b5ea55b010c7b021c19a94ad"
 dependencies = [
  "base64 0.21.7",
  "bip32",
@@ -457,12 +457,13 @@ dependencies = [
 [[package]]
 name = "cashu-sdk"
 version = "0.1.0"
-source = "git+https://github.com/thesimplekid/cashu-crab?rev=c126bba#c126bba961376d055cfc64488a1e16c6fb849cc2"
+source = "git+https://github.com/thesimplekid/cashu-crab?rev=b663228#b663228cd2ba0015b5ea55b010c7b021c19a94ad"
 dependencies = [
  "async-trait",
  "bip39",
  "cashu",
  "futures-util",
+ "http 1.0.0",
  "redb",
  "serde",
  "serde_json",
@@ -1047,13 +1048,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "http"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b32afd38673a8016f7c9ae69e5af41a58f81b1d31689040f2f1959594ce194ea"
+dependencies = [
+ "bytes",
+ "fnv",
+ "itoa",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ceab25649e9960c0311ea418d17bee82c0dcec1bd053b5f9a66e265a693bed2"
 dependencies = [
  "bytes",
- "http",
+ "http 0.2.11",
  "pin-project-lite",
 ]
 
@@ -1085,7 +1097,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "httparse",
  "httpdate",
@@ -2191,7 +2203,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "http-range-header",
  "pin-project-lite",

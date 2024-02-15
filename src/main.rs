@@ -12,6 +12,7 @@ use axum::http::header::{
     ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
 };
 use axum::http::StatusCode;
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
@@ -24,6 +25,7 @@ use cashu_sdk::nuts::{
 };
 use cashu_sdk::types::MintQuote;
 use clap::Parser;
+use error::into_response;
 use futures::StreamExt;
 use ln_rs::{Bolt11Invoice, Ln};
 use tokio::sync::Mutex;
@@ -34,7 +36,6 @@ use utils::unix_time;
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 use crate::cli::CLIArgs;
-use crate::error::Error;
 
 mod cli;
 mod config;
@@ -110,11 +111,8 @@ async fn main() -> anyhow::Result<()> {
 
     let last_pay = fs::read(&last_pay_path).unwrap();
 
-    println!("last pay {:?}", last_pay);
-
     let last_pay_index =
         u64::from_be_bytes(last_pay.try_into().unwrap_or([0, 0, 0, 0, 0, 0, 0, 0]));
-    println!("last pay index {:?}", last_pay_index);
 
     let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
 
@@ -215,8 +213,14 @@ struct MintState {
     mint: Arc<Mutex<Mint>>,
 }
 
-async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, StatusCode> {
-    let pubkeys = state.mint.lock().await.pubkeys().await.unwrap();
+async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, Response> {
+    let pubkeys = state
+        .mint
+        .lock()
+        .await
+        .pubkeys()
+        .await
+        .map_err(into_response)?;
 
     Ok(Json(pubkeys))
 }
@@ -224,21 +228,26 @@ async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, 
 async fn get_keyset_pubkeys(
     State(state): State<MintState>,
     Path(keyset_id): Path<Id>,
-) -> Result<Json<KeysResponse>, StatusCode> {
+) -> Result<Json<KeysResponse>, Response> {
     let pubkeys = state
         .mint
         .lock()
         .await
         .keyset_pubkeys(&keyset_id)
         .await
-        .unwrap()
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(into_response)?;
 
     Ok(Json(pubkeys))
 }
 
-async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeysetResponse>, StatusCode> {
-    let mint = state.mint.lock().await.keysets().await.unwrap();
+async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeysetResponse>, Response> {
+    let mint = state
+        .mint
+        .lock()
+        .await
+        .keysets()
+        .await
+        .map_err(into_response)?;
 
     Ok(Json(mint))
 }
@@ -246,7 +255,7 @@ async fn get_keysets(State(state): State<MintState>) -> Result<Json<KeysetRespon
 async fn get_mint_bolt11_quote(
     State(state): State<MintState>,
     Json(payload): Json<MintQuoteBolt11Request>,
-) -> Result<Json<MintQuoteBolt11Response>, StatusCode> {
+) -> Result<Json<MintQuoteBolt11Response>, Response> {
     let invoice = state
         .ln
         .ln_processor
@@ -269,7 +278,7 @@ async fn get_mint_bolt11_quote(
             unix_time() + 120,
         )
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(quote.into()))
 }
@@ -277,14 +286,14 @@ async fn get_mint_bolt11_quote(
 async fn get_check_mint_bolt11_quote(
     State(state): State<MintState>,
     Path(quote_id): Path<String>,
-) -> Result<Json<MintQuoteBolt11Response>, StatusCode> {
+) -> Result<Json<MintQuoteBolt11Response>, Response> {
     let quote = state
         .mint
         .lock()
         .await
         .check_mint_quote(&quote_id)
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(quote))
 }
@@ -292,14 +301,14 @@ async fn get_check_mint_bolt11_quote(
 async fn post_mint_bolt11(
     State(state): State<MintState>,
     Json(payload): Json<MintBolt11Request>,
-) -> Result<Json<MintBolt11Response>, StatusCode> {
+) -> Result<Json<MintBolt11Response>, Response> {
     let res = state
         .mint
         .lock()
         .await
         .process_mint_request(payload)
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(res))
 }
@@ -307,7 +316,7 @@ async fn post_mint_bolt11(
 async fn get_melt_bolt11_quote(
     State(state): State<MintState>,
     Json(payload): Json<MeltQuoteBolt11Request>,
-) -> Result<Json<MeltQuoteBolt11Response>, StatusCode> {
+) -> Result<Json<MeltQuoteBolt11Response>, Response> {
     let amount = payload.request.amount_milli_satoshis().unwrap() / 1000;
     let quote = state
         .mint
@@ -321,7 +330,7 @@ async fn get_melt_bolt11_quote(
             unix_time() + 1800,
         )
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(quote.into()))
 }
@@ -379,26 +388,40 @@ async fn post_melt_bolt11(
 async fn post_check(
     State(state): State<MintState>,
     Json(payload): Json<CheckStateRequest>,
-) -> Result<Json<CheckStateResponse>, Error> {
-    let state = state.mint.lock().await.check_state(&payload).await.unwrap();
+) -> Result<Json<CheckStateResponse>, Response> {
+    let state = state
+        .mint
+        .lock()
+        .await
+        .check_state(&payload)
+        .await
+        .map_err(into_response)?;
 
     Ok(Json(state))
 }
 
-async fn get_mint_info(State(state): State<MintState>) -> Result<Json<MintInfo>, Error> {
-    Ok(Json(state.mint.lock().await.mint_info().await.unwrap()))
+async fn get_mint_info(State(state): State<MintState>) -> Result<Json<MintInfo>, Response> {
+    Ok(Json(
+        state
+            .mint
+            .lock()
+            .await
+            .mint_info()
+            .await
+            .map_err(into_response)?,
+    ))
 }
 
 async fn post_swap(
     State(state): State<MintState>,
     Json(payload): Json<SwapRequest>,
-) -> Result<Json<SwapResponse>, Error> {
+) -> Result<Json<SwapResponse>, Response> {
     let swap_response = state
         .mint
         .lock()
         .await
         .process_swap_request(payload)
         .await
-        .unwrap();
+        .map_err(into_response)?;
     Ok(Json(swap_response))
 }

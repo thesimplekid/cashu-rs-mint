@@ -2,8 +2,9 @@ use std::fmt;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::Json;
+use cashu_sdk::cashu::error::ErrorResponse;
 use cashu_sdk::lightning_invoice::ParseOrSemanticError;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Error {
@@ -42,12 +43,6 @@ impl From<url::ParseError> for Error {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    code: u16,
-    error: String,
-}
-
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         match self {
@@ -57,5 +52,15 @@ impl IntoResponse for Error {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
             }
         }
+    }
+}
+
+pub fn into_response(error: cashu_sdk::mint::Error) -> Response {
+    match &error {
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json::<ErrorResponse>(error.into()),
+        )
+            .into_response(),
     }
 }
