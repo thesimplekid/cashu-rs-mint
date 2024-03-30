@@ -166,6 +166,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/melt/bolt11", post(post_melt_bolt11))
         .route("/v1/checkstate", post(post_check))
         .route("/v1/info", get(get_mint_info))
+        .route("/v1/restore", post(post_restore))
         .layer(CorsLayer::very_permissive().allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
@@ -318,6 +319,7 @@ async fn get_melt_bolt11_quote(
     Json(payload): Json<MeltQuoteBolt11Request>,
 ) -> Result<Json<MeltQuoteBolt11Response>, Response> {
     let amount = payload.request.amount_milli_satoshis().unwrap() / 1000;
+    assert!(amount > 0);
     let quote = state
         .mint
         .lock()
@@ -424,4 +426,19 @@ async fn post_swap(
         .await
         .map_err(into_response)?;
     Ok(Json(swap_response))
+}
+
+async fn post_restore(
+    State(state): State<MintState>,
+    Json(payload): Json<RestoreRequest>,
+) -> Result<Json<RestoreResponse>, Response> {
+    let restore_response = state
+        .mint
+        .lock()
+        .await
+        .restore(payload)
+        .await
+        .map_err(into_response)?;
+
+    Ok(Json(restore_response))
 }

@@ -56,11 +56,9 @@ impl IntoResponse for Error {
 }
 
 pub fn into_response(error: cashu_sdk::mint::Error) -> Response {
-    match &error {
-        _ => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json::<ErrorResponse>(error.into()),
-        )
-            .into_response(),
-    }
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json::<ErrorResponse>(error.into()),
+    )
+        .into_response()
 }
