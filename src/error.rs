@@ -10,7 +10,8 @@ use cdk::lightning_invoice::ParseOrSemanticError;
 pub enum Error {
     DecodeInvoice,
     StatusCode(StatusCode),
-    _Ln(ln_rs::Error),
+    Ln(ln_rs::Error),
+    Custom(String),
 }
 
 impl std::error::Error for Error {}
@@ -20,7 +21,8 @@ impl fmt::Display for Error {
         match self {
             Self::DecodeInvoice => write!(f, "Failed to decode LN Invoice"),
             Self::StatusCode(code) => write!(f, "{}", code),
-            Self::_Ln(code) => write!(f, "{}", code),
+            Self::Custom(err) => write!(f, "{}", err),
+            Self::Ln(code) => write!(f, "{}", code),
         }
     }
 }
@@ -48,8 +50,11 @@ impl IntoResponse for Error {
         match self {
             Error::DecodeInvoice => (StatusCode::BAD_REQUEST, self.to_string()).into_response(),
             Error::StatusCode(code) => (code, "").into_response(),
-            Error::_Ln(code) => {
+            Error::Ln(code) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, code.to_string()).into_response()
+            }
+            Error::Custom(msg) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string()).into_response()
             }
         }
     }
