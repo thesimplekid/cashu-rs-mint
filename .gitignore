@@ -3,6 +3,7 @@ seed
 *.redb
 device_cert
 device_key
+greenlight_seed
 TODO.md
 /tmp
 client.crt

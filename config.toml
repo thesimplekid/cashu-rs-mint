@@ -24,7 +24,7 @@ ln_backend = "Greenlight"
 network = "bitcoin"
 greenlight_cert_path = "./client.crt"
 greenlight_key_path = "./client-key.pem"
-geenlight_seed_path = "./greenlight_seed"
+greenlight_seed_path = "./greenlight_seed"
 
 # CLN
 cln_path = "/tmp/cashu-rs-mint/lighting/ln_1/regtest/lightning-rpc"
