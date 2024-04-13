@@ -33,12 +33,12 @@ time = "0.3.22"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "default", "derive"]}
 anyhow = "1.0.71"
-cashu-sdk = { git = "https://github.com/thesimplekid/cashu-crab", rev = "21926da", default-features = false, features = ["mint", "all-nuts", "redb"] }
-# cashu-sdk = { path = "../cashu-crab/nut09/crates/cashu-sdk", default-features = false, features = ["mint", "all-nuts", "redb"] }
+cdk = { git = "https://github.com/thesimplekid/cashu-crab", rev = "664776f", default-features = false, features = ["mint", "all-nuts", "redb"] }
+# cdk = { path = "../cashu-crab/nut09/crates/cashu-sdk", default-features = false, features = ["mint", "all-nuts", "redb"] }
 bitcoin = { version = "0.30.0", features = ["no-std"] }
 serde = "1.0.164"
 serde_json = "1.0.96"
 nostr = { version = "0.22.0", default-features = false }
 # ln-rs = { path = "../ln-rs/crates/ln-rs" }
-ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "a16e2926c0585d140abf844513606f9ce7e3fb24", default-features = false, features = ["cln"] }
+ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "629bfe4e", default-features = false, features = ["cln"] }
 url = "2.4.0"

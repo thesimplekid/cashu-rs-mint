@@ -29,7 +29,7 @@ THE SOFTWARE.
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use cashu_sdk::Amount;
+use cdk::Amount;
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};

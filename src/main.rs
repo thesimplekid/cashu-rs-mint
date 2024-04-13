@@ -16,14 +16,14 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
-use cashu_sdk::amount::Amount;
-use cashu_sdk::mint::{LocalStore, Mint, RedbLocalStore};
-use cashu_sdk::nuts::nut02::Id;
-use cashu_sdk::nuts::{
+use cdk::amount::Amount;
+use cdk::mint::{LocalStore, Mint, RedbLocalStore};
+use cdk::nuts::nut02::Id;
+use cdk::nuts::{
     CheckStateRequest, CheckStateResponse, MeltBolt11Request, MeltBolt11Response,
     MintBolt11Request, MintBolt11Response, SwapRequest, SwapResponse, *,
 };
-use cashu_sdk::types::MintQuote;
+use cdk::types::MintQuote;
 use clap::Parser;
 use error::into_response;
 use futures::StreamExt;

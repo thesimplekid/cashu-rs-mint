@@ -3,8 +3,8 @@ use std::fmt;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use cashu_sdk::cashu::error::ErrorResponse;
-use cashu_sdk::lightning_invoice::ParseOrSemanticError;
+use cdk::error::ErrorResponse;
+use cdk::lightning_invoice::ParseOrSemanticError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -55,7 +55,7 @@ impl IntoResponse for Error {
     }
 }
 
-pub fn into_response(error: cashu_sdk::mint::Error) -> Response {
+pub fn into_response(error: cdk::mint::Error) -> Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json::<ErrorResponse>(error.into()),
