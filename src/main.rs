@@ -6,17 +6,18 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use axum::extract::{Json, Path, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
 };
 use axum::http::StatusCode;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
 use cdk::amount::Amount;
+use cdk::error::ErrorResponse;
 use cdk::mint::{LocalStore, Mint, RedbLocalStore};
 use cdk::nuts::nut02::Id;
 use cdk::nuts::{
@@ -25,13 +26,15 @@ use cdk::nuts::{
 };
 use cdk::types::MintQuote;
 use clap::Parser;
-use error::into_response;
+use error::{into_response, Error};
 use futures::StreamExt;
 use ln_rs::{Bolt11Invoice, Ln};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, warn};
+use tracing::warn;
 use utils::unix_time;
+
+use crate::config::LnBackend;
 
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
@@ -57,8 +60,6 @@ async fn main() -> anyhow::Result<()> {
         None => "./config.toml".to_string(),
     };
 
-    debug!("Path: {}", config_file_arg);
-
     let settings = config::Settings::new(&Some(config_file_arg));
 
     let db_path = match args.db {
@@ -66,7 +67,11 @@ async fn main() -> anyhow::Result<()> {
         None => settings.info.clone().db_path,
     };
 
-    let localstore = RedbLocalStore::new(db_path.to_str().unwrap())?;
+    let db_path = db_path
+        .to_str()
+        .ok_or(Error::Custom("Invalid db_path".to_string()))?;
+
+    let localstore = RedbLocalStore::new(db_path)?;
     let mint_info = MintInfo::default();
     //settings.mint_info.clone();
     localstore.set_mint_info(&mint_info).await?;
@@ -75,25 +80,12 @@ async fn main() -> anyhow::Result<()> {
 
     let mint = Mint::new(
         Arc::new(localstore),
-        mnemonic,
+        mnemonic.clone(),
         HashSet::new(),
         Amount::ZERO,
         0.0,
     )
     .await?;
-
-    println!("Mint created");
-
-    let cln_socket = utils::expand_path(
-        settings
-            .ln
-            .cln_path
-            .clone()
-            .ok_or(anyhow!("cln socket not defined"))?
-            .to_str()
-            .ok_or(anyhow!("cln socket not defined"))?,
-    )
-    .ok_or(anyhow!("cln socket not defined"))?;
 
     let last_pay_path = PathBuf::from_str(&settings.info.last_pay_path.clone())?;
 
@@ -101,23 +93,104 @@ async fn main() -> anyhow::Result<()> {
         Ok(_) => (),
         Err(_e) => {
             // Create the parent directory if it doesn't exist
-            fs::create_dir_all(last_pay_path.parent().unwrap())?;
+            fs::create_dir_all(
+                last_pay_path
+                    .parent()
+                    .ok_or(Error::Custom("Invalid last_pay_path".to_string()))?,
+            )?;
 
             // Attempt to create the file
-            let mut fs = File::create(&last_pay_path).unwrap();
-            fs.write_all(&0_u64.to_be_bytes()).unwrap();
+            let mut fs = File::create(&last_pay_path)?;
+            fs.write_all(&0_u64.to_be_bytes())?;
         }
     }
 
-    let last_pay = fs::read(&last_pay_path).unwrap();
+    let last_pay = fs::read(&last_pay_path)?;
 
     let last_pay_index =
         u64::from_be_bytes(last_pay.try_into().unwrap_or([0, 0, 0, 0, 0, 0, 0, 0]));
 
-    let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
+    let ln: Ln = match settings.ln.ln_backend {
+        LnBackend::Greenlight => {
+            let seed_path = settings
+                .ln
+                .greenlight_seed_path
+                .ok_or(anyhow!("Greenlight seed not defined"))?;
+            let greenlight_mnemonic = match fs::metadata(&seed_path) {
+                Ok(_) => {
+                    let contents = fs::read_to_string(seed_path)?;
+                    Mnemonic::from_str(&contents)?
+                }
+                Err(_e) => bail!("Seed undefined"),
+            };
 
-    let ln = Ln {
-        ln_processor: Arc::new(cln.clone()),
+            let mut greenlight = if let Ok(greenlight) = ln_rs::Greenlight::recover(
+                greenlight_mnemonic.clone(),
+                settings
+                    .ln
+                    .greenlight_cert_path
+                    .as_ref()
+                    .ok_or(anyhow!("cert path not set"))?,
+                settings
+                    .ln
+                    .greenlight_key_path
+                    .as_ref()
+                    .ok_or(anyhow!("cert path not set"))?,
+                &settings.ln.network.ok_or(anyhow!("network not set"))?,
+                Some(last_pay_index),
+            )
+            .await
+            {
+                greenlight
+            } else {
+                let greenlight = ln_rs::Greenlight::new(
+                    greenlight_mnemonic,
+                    &settings
+                        .ln
+                        .greenlight_cert_path
+                        .ok_or(anyhow!("cert path not set"))?,
+                    &settings
+                        .ln
+                        .greenlight_key_path
+                        .ok_or(anyhow!("cert path not set"))?,
+                    &settings.ln.network.ok_or(anyhow!("network not set"))?,
+                )
+                .await;
+
+                greenlight?
+            };
+
+            // Start the greenlight hsmd
+            // This does not actually need to be run within the mint
+            // However, it MUST be running somewhere
+            // TODO: Should add an option to not start it here
+            greenlight.start_signer()?;
+
+            Ln {
+                ln_processor: Arc::new(greenlight),
+            }
+        }
+        LnBackend::Cln => {
+            let cln_socket = utils::expand_path(
+                settings
+                    .ln
+                    .cln_path
+                    .clone()
+                    .ok_or(anyhow!("cln socket not defined"))?
+                    .to_str()
+                    .ok_or(anyhow!("cln socket not defined"))?,
+            )
+            .ok_or(anyhow!("cln socket not defined"))?;
+
+            let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
+
+            Ln {
+                ln_processor: Arc::new(cln.clone()),
+            }
+        }
+        LnBackend::Ldk => {
+            todo!()
+        }
     };
 
     let ln_clone = ln.clone();
@@ -266,7 +339,17 @@ async fn get_mint_bolt11_quote(
         )
         .await;
 
-    let invoice = invoice.unwrap();
+    let invoice = if let Ok(invoice) = invoice {
+        invoice
+    } else {
+        warn!("Could not get ln invoice for mint quote");
+        let response = ErrorResponse {
+            code: 99,
+            error: Some("Could not fetch ln invoice".to_string()),
+            detail: None,
+        };
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response());
+    };
 
     let quote = state
         .mint
@@ -318,7 +401,11 @@ async fn get_melt_bolt11_quote(
     State(state): State<MintState>,
     Json(payload): Json<MeltQuoteBolt11Request>,
 ) -> Result<Json<MeltQuoteBolt11Response>, Response> {
-    let amount = payload.request.amount_milli_satoshis().unwrap() / 1000;
+    let amount = payload
+        .request
+        .amount_milli_satoshis()
+        .ok_or(Error::Custom("Invoice amount not defined".to_string()).into_response())?
+        / 1000;
     assert!(amount > 0);
     let quote = state
         .mint
@@ -340,14 +427,14 @@ async fn get_melt_bolt11_quote(
 async fn get_check_melt_bolt11_quote(
     State(state): State<MintState>,
     Path(quote_id): Path<String>,
-) -> Result<Json<MeltQuoteBolt11Response>, StatusCode> {
+) -> Result<Json<MeltQuoteBolt11Response>, Response> {
     let quote = state
         .mint
         .lock()
         .await
         .check_melt_quote(&quote_id)
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(quote))
 }
@@ -355,34 +442,36 @@ async fn get_check_melt_bolt11_quote(
 async fn post_melt_bolt11(
     State(state): State<MintState>,
     Json(payload): Json<MeltBolt11Request>,
-) -> Result<Json<MeltBolt11Response>, StatusCode> {
+) -> Result<Json<MeltBolt11Response>, Response> {
     let quote = state
         .mint
         .lock()
         .await
         .verify_melt_request(&payload)
         .await
-        .map_err(|_| StatusCode::NOT_ACCEPTABLE)?;
+        .map_err(into_response)?;
 
     let pre = state
         .ln
         .ln_processor
-        .pay_invoice(Bolt11Invoice::from_str(&quote.request).unwrap(), None)
+        .pay_invoice(
+            Bolt11Invoice::from_str(&quote.request)
+                .map_err(|_| Error::DecodeInvoice.into_response())?,
+            None,
+        )
         .await
-        .unwrap();
+        .map_err(|err| Error::Ln(err).into_response())?;
 
-    let preimage = pre.payment_preimage;
+    let preimage = pre
+        .payment_preimage
+        .ok_or(Error::DecodeInvoice.into_response())?;
     let res = state
         .mint
         .lock()
         .await
-        .process_melt_request(
-            &payload,
-            &preimage.unwrap(),
-            Amount::from(pre.total_spent.to_sat()),
-        )
+        .process_melt_request(&payload, &preimage, Amount::from(pre.total_spent.to_sat()))
         .await
-        .unwrap();
+        .map_err(into_response)?;
 
     Ok(Json(res))
 }
@@ -425,6 +514,7 @@ async fn post_swap(
         .process_swap_request(payload)
         .await
         .map_err(into_response)?;
+
     Ok(Json(swap_response))
 }
 

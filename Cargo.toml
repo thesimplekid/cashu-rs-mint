@@ -11,6 +11,7 @@ license-file = "LICENSE"
 keywords = ["bitcoin", "e-cash", "cashu"]
 
 
+
 [dependencies]
 async-trait = "0.1.77"
 axum = "0.6.18"
@@ -40,5 +41,5 @@ serde = "1.0.164"
 serde_json = "1.0.96"
 nostr = { version = "0.22.0", default-features = false }
 # ln-rs = { path = "../ln-rs/crates/ln-rs" }
-ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "629bfe4e", default-features = false, features = ["cln"] }
+ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "629bfe4e", default-features = false, features = ["cln", "greenlight"] }
 url = "2.4.0"

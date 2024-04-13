@@ -16,6 +16,10 @@ WIP
 - :heavy_check_mark: [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md)
 - :heavy_check_mark: [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - :heavy_check_mark: [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
+- :heavy_check_mark: [NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md)
+- :heavy_check_mark: [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
+- :heavy_check_mark: [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md)
+- :heavy_check_mark: [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md)
 
 
 ## Development

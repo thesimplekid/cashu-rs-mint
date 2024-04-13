@@ -27,6 +27,7 @@
           buildInputs = [
           pkgs.clightning
           pkgs.bitcoind
+          pkgs.protobuf
           ];
         shellHook = ''
 

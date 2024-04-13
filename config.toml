@@ -2,7 +2,8 @@
 url = "https://example.com/"
 listen_host = "127.0.0.1"
 listen_port = 8085
-mnemonic = "inner strategy nasty verify camp bind avoid cause glue holiday dress bounce exotic husband hungry winter diet town spray team number hen upper seek"
+# mnemonic = "inner strategy nasty verify camp bind avoid cause glue holiday dress bounce exotic husband hungry winter diet town spray team number hen upper seek"
+mnemonic = "news image cigar behave twist truly negative globe during scissors model client"
 max_order = 32
 db_path = "/tmp/cashu-rs-mint/mint.redb"
 last_pay_path = "/tmp/cashu-rs-mint/last_pay.txt"
@@ -19,7 +20,11 @@ email = "me@example.com"
 [ln]
 
 # Required ln backend `Cln`, `Ldk`, `Greenlight`
-ln_backend = "Cln"
+ln_backend = "Greenlight"
+network = "bitcoin"
+greenlight_cert_path = "./client.crt"
+greenlight_key_path = "./client-key.pem"
+greenlight_seed_path = "./greenlight_seed"
 
 # CLN
 cln_path = "/tmp/cashu-rs-mint/lighting/ln_1/regtest/lightning-rpc"
