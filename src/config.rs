@@ -29,6 +29,7 @@ THE SOFTWARE.
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use bitcoin::Network;
 use cdk::Amount;
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
@@ -79,11 +80,19 @@ pub enum LnBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ln {
     pub ln_backend: LnBackend,
+    #[serde(default = "network_default")]
+    pub network: Option<Network>,
     pub cln_path: Option<PathBuf>,
-    pub greenlight_invite_code: Option<String>,
+    pub greenlight_cert_path: Option<String>,
+    pub greenlight_key_path: Option<String>,
+    pub greenlight_seed_path: Option<String>,
     pub invoice_description: Option<String>,
     pub fee_percent: f64,
     pub reserve_fee_min: Amount,
+}
+
+fn network_default() -> Option<Network> {
+    Some(Network::Bitcoin)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -134,7 +143,11 @@ impl Settings {
 
         match settings.ln.ln_backend {
             LnBackend::Cln => assert!(settings.ln.cln_path.is_some()),
-            LnBackend::Greenlight => (),
+            LnBackend::Greenlight => {
+                assert!(settings.ln.greenlight_cert_path.is_some());
+                assert!(settings.ln.greenlight_key_path.is_some());
+                assert!(settings.ln.greenlight_seed_path.is_some());
+            }
             LnBackend::Ldk => (),
         }
 

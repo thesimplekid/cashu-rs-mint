@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use axum::extract::{Json, Path, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
@@ -32,6 +32,8 @@ use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, warn};
 use utils::unix_time;
+
+use crate::config::LnBackend;
 
 pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
@@ -75,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mint = Mint::new(
         Arc::new(localstore),
-        mnemonic,
+        mnemonic.clone(),
         HashSet::new(),
         Amount::ZERO,
         0.0,
@@ -83,17 +85,6 @@ async fn main() -> anyhow::Result<()> {
     .await?;
 
     println!("Mint created");
-
-    let cln_socket = utils::expand_path(
-        settings
-            .ln
-            .cln_path
-            .clone()
-            .ok_or(anyhow!("cln socket not defined"))?
-            .to_str()
-            .ok_or(anyhow!("cln socket not defined"))?,
-    )
-    .ok_or(anyhow!("cln socket not defined"))?;
 
     let last_pay_path = PathBuf::from_str(&settings.info.last_pay_path.clone())?;
 
@@ -114,10 +105,87 @@ async fn main() -> anyhow::Result<()> {
     let last_pay_index =
         u64::from_be_bytes(last_pay.try_into().unwrap_or([0, 0, 0, 0, 0, 0, 0, 0]));
 
-    let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
+    let ln: Ln = match settings.ln.ln_backend {
+        LnBackend::Greenlight => {
+            let seed_path = settings
+                .ln
+                .greenlight_seed_path
+                .ok_or(anyhow!("Greenlight seed not defined"))?;
+            let greenlight_mnemonic = match fs::metadata(&seed_path) {
+                Ok(_) => {
+                    let contents = fs::read_to_string(seed_path)?;
+                    Mnemonic::from_str(&contents)?
+                }
+                Err(_e) => bail!("Seed undefined"),
+            };
 
-    let ln = Ln {
-        ln_processor: Arc::new(cln.clone()),
+            let mut greenlight = if let Ok(greenlight) = ln_rs::Greenlight::recover(
+                greenlight_mnemonic.clone(),
+                settings
+                    .ln
+                    .greenlight_cert_path
+                    .as_ref()
+                    .ok_or(anyhow!("cert path not set"))?,
+                settings
+                    .ln
+                    .greenlight_key_path
+                    .as_ref()
+                    .ok_or(anyhow!("cert path not set"))?,
+                &settings.ln.network.ok_or(anyhow!("network not set"))?,
+                Some(last_pay_index),
+            )
+            .await
+            {
+                greenlight
+            } else {
+                let greenlight = ln_rs::Greenlight::new(
+                    greenlight_mnemonic,
+                    &settings
+                        .ln
+                        .greenlight_cert_path
+                        .ok_or(anyhow!("cert path not set"))?,
+                    &settings
+                        .ln
+                        .greenlight_key_path
+                        .ok_or(anyhow!("cert path not set"))?,
+                    &settings.ln.network.ok_or(anyhow!("network not set"))?,
+                )
+                .await;
+
+                greenlight?
+            };
+
+            // Start the greenlight hsmd
+            // This does not actually need to be run within the mint
+            // However, it MUST be running somewhere
+            // TODO: Should add an option to not start it here
+            greenlight.start_signer()?;
+
+            Ln {
+                ln_processor: Arc::new(greenlight),
+            }
+        }
+        LnBackend::Cln => {
+            let cln_socket = utils::expand_path(
+                settings
+                    .ln
+                    .cln_path
+                    .clone()
+                    .ok_or(anyhow!("cln socket not defined"))?
+                    .to_str()
+                    .ok_or(anyhow!("cln socket not defined"))?,
+            )
+            .ok_or(anyhow!("cln socket not defined"))?;
+
+            let cln = ln_rs::Cln::new(cln_socket, Some(last_pay_index)).await?;
+
+            Ln {
+                ln_processor: Arc::new(cln.clone()),
+            }
+        }
+        LnBackend::Ldk => {
+            todo!()
+        }
     };
 
     let ln_clone = ln.clone();

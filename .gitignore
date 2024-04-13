@@ -5,3 +5,6 @@ device_cert
 device_key
 TODO.md
 /tmp
+client.crt
+client-key.pem
+greenlight_seed
