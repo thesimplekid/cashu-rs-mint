@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -17,13 +16,15 @@ use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
 use cdk::amount::Amount;
-use cdk::mint::{LocalStore, Mint, RedbLocalStore};
+use cdk::cdk_database::MintDatabase;
+use cdk::mint::Mint;
 use cdk::nuts::nut02::Id;
 use cdk::nuts::{
     CheckStateRequest, CheckStateResponse, MeltBolt11Request, MeltBolt11Response,
     MintBolt11Request, MintBolt11Response, SwapRequest, SwapResponse, *,
 };
 use cdk::types::MintQuote;
+use cdk_redb::MintRedbDatabase;
 use clap::Parser;
 use error::into_response;
 use futures::StreamExt;
@@ -61,12 +62,14 @@ async fn main() -> anyhow::Result<()> {
 
     let settings = config::Settings::new(&Some(config_file_arg));
 
+    let mint_url = settings.info.url.clone();
+
     let db_path = match args.db {
         Some(path) => PathBuf::from_str(&path)?,
         None => settings.info.clone().db_path,
     };
 
-    let localstore = RedbLocalStore::new(db_path.to_str().unwrap())?;
+    let localstore = MintRedbDatabase::new(db_path.to_str().unwrap())?;
     let mint_info = MintInfo::default();
     //settings.mint_info.clone();
     localstore.set_mint_info(&mint_info).await?;
@@ -74,9 +77,8 @@ async fn main() -> anyhow::Result<()> {
     let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
 
     let mint = Mint::new(
+        &mnemonic.to_seed_normalized(""),
         Arc::new(localstore),
-        mnemonic,
-        HashSet::new(),
         Amount::ZERO,
         0.0,
     )
@@ -145,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
     let state = MintState {
         ln,
         mint: Arc::new(Mutex::new(mint)),
+        mint_url,
     };
 
     let mint_service = Router::new()
@@ -194,6 +197,7 @@ async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> anyhow::Result<(
         if quote.request.eq(request) {
             let q = MintQuote {
                 id: quote.id,
+                mint_url: quote.mint_url,
                 amount: quote.amount,
                 unit: quote.unit,
                 request: quote.request,
@@ -212,6 +216,7 @@ async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> anyhow::Result<(
 struct MintState {
     ln: Ln,
     mint: Arc<Mutex<Mint>>,
+    mint_url: String,
 }
 
 async fn get_keys(State(state): State<MintState>) -> Result<Json<KeysResponse>, Response> {
@@ -273,6 +278,7 @@ async fn get_mint_bolt11_quote(
         .lock()
         .await
         .new_mint_quote(
+            state.mint_url.into(),
             invoice.to_string(),
             payload.unit,
             payload.amount,

@@ -33,8 +33,11 @@ time = "0.3.22"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "default", "derive"]}
 anyhow = "1.0.71"
-cdk = { git = "https://github.com/thesimplekid/cashu-crab", rev = "664776f", default-features = false, features = ["mint", "all-nuts", "redb"] }
-# cdk = { path = "../cashu-crab/nut09/crates/cashu-sdk", default-features = false, features = ["mint", "all-nuts", "redb"] }
+cdk = { git = "https://github.com/cashubtc/cdk", rev = "efd9b39", default-features = false, features = ["mint"] }
+cdk-redb = { git = "https://github.com/cashubtc/cdk", rev = "efd9b39", default-features = false, features = ["mint"] }
+# cdk = { path = "../../cdk/nut14/crates/cdk", default-features = false, features = ["mint", "all-nuts"] }
+# cdk-redb = { path = "../../cdk/nut14/crates/cdk-redb" }
+
 bitcoin = { version = "0.30.0", features = ["no-std"] }
 serde = "1.0.164"
 serde_json = "1.0.96"

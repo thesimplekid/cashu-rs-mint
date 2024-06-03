@@ -55,7 +55,7 @@ impl IntoResponse for Error {
     }
 }
 
-pub fn into_response(error: cdk::mint::Error) -> Response {
+pub fn into_response(error: cdk::mint::error::Error) -> Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json::<ErrorResponse>(error.into()),
