@@ -16,7 +16,6 @@ use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
 use cdk::amount::Amount;
-use cdk::cdk_database::MintDatabase;
 use cdk::mint::Mint;
 use cdk::nuts::nut02::Id;
 use cdk::nuts::{
@@ -71,13 +70,12 @@ async fn main() -> anyhow::Result<()> {
 
     let localstore = MintRedbDatabase::new(db_path.to_str().unwrap())?;
     let mint_info = MintInfo::default();
-    //settings.mint_info.clone();
-    localstore.set_mint_info(&mint_info).await?;
 
     let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
 
     let mint = Mint::new(
         &mnemonic.to_seed_normalized(""),
+        mint_info,
         Arc::new(localstore),
         Amount::ZERO,
         0.0,
@@ -410,13 +408,7 @@ async fn post_check(
 
 async fn get_mint_info(State(state): State<MintState>) -> Result<Json<MintInfo>, Response> {
     Ok(Json(
-        state
-            .mint
-            .lock()
-            .await
-            .mint_info()
-            .await
-            .map_err(into_response)?,
+        state.mint.lock().await.mint_info().map_err(into_response)?,
     ))
 }
 

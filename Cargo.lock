@@ -397,7 +397,7 @@ checksum = "d32a725bc159af97c3e629873bb9f88fb8cf8a4867175f76dc987815ea07c83b"
 [[package]]
 name = "cdk"
 version = "0.1.0"
-source = "git+https://github.com/cashubtc/cdk?rev=efd9b39#efd9b397225bf2c9f7d29aef859a4eb85a3e561e"
+source = "git+https://github.com/cashubtc/cdk?rev=267e5f0#267e5f044d8e99a698dd6662b54483a65d8648b9"
 dependencies = [
  "async-trait",
  "base64 0.22.0",
@@ -421,7 +421,7 @@ dependencies = [
 [[package]]
 name = "cdk-redb"
 version = "0.1.0"
-source = "git+https://github.com/cashubtc/cdk?rev=efd9b39#efd9b397225bf2c9f7d29aef859a4eb85a3e561e"
+source = "git+https://github.com/cashubtc/cdk?rev=267e5f0#267e5f044d8e99a698dd6662b54483a65d8648b9"
 dependencies = [
  "async-trait",
  "cdk",
