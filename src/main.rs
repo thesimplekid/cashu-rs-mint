@@ -377,8 +377,6 @@ async fn post_melt_bolt11(
         .await
         .map_err(|_| StatusCode::NOT_ACCEPTABLE)?;
 
-    tracing::debug!("{:?}", quote);
-
     let pre = state
         .ln
         .ln_processor
