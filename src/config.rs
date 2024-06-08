@@ -69,6 +69,7 @@ fn last_pay_path() -> String {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum LnBackend {
     #[default]
     Cln,
@@ -86,11 +87,25 @@ pub struct Ln {
     pub reserve_fee_min: Amount,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DatabaseEngine {
+    #[default]
+    Sqlite,
+    Redb,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Database {
+    pub engine: DatabaseEngine,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub info: Info,
     //    pub mint_info: MintInfo,
     pub ln: Ln,
+    pub database: Database,
 }
 
 impl Settings {

@@ -16,6 +16,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use bip39::Mnemonic;
 use cdk::amount::Amount;
+use cdk::cdk_database::{self, MintDatabase};
 use cdk::mint::Mint;
 use cdk::nuts::nut02::Id;
 use cdk::nuts::{
@@ -23,6 +24,7 @@ use cdk::nuts::{
     MintBolt11Request, MintBolt11Response, SwapRequest, SwapResponse, *,
 };
 use cdk::types::MintQuote;
+use cdk_redb::MintRedbDatabase;
 use cdk_sqlite::MintSqliteDatabase;
 use clap::Parser;
 use error::into_response;
@@ -33,9 +35,10 @@ use tower_http::cors::CorsLayer;
 use tracing::{debug, warn};
 use utils::unix_time;
 
-pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
-
 use crate::cli::CLIArgs;
+use crate::config::DatabaseEngine;
+
+pub const CARGO_PKG_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 mod cli;
 mod config;
@@ -68,7 +71,13 @@ async fn main() -> anyhow::Result<()> {
         None => settings.info.clone().db_path,
     };
 
-    let localstore = MintSqliteDatabase::new(db_path.to_str().unwrap()).await?;
+    let localstore: Arc<dyn MintDatabase<Err = cdk_database::Error> + Send + Sync> =
+        match settings.database.engine {
+            DatabaseEngine::Sqlite => {
+                Arc::new(MintSqliteDatabase::new(db_path.to_str().unwrap()).await?)
+            }
+            DatabaseEngine::Redb => Arc::new(MintRedbDatabase::new(db_path.to_str().unwrap())?),
+        };
     let mint_info = MintInfo::default();
 
     let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
@@ -76,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
     let mint = Mint::new(
         &mnemonic.to_seed_normalized(""),
         mint_info,
-        Arc::new(localstore),
+        localstore,
         Amount::ZERO,
         0.0,
     )

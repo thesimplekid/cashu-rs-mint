@@ -16,10 +16,14 @@ last_pay_path = "/tmp/cashu-rs-mint/last_pay.txt"
 [contact]
 email = "me@example.com"
 
+[database]
+# Database engine (sqlite/redb) defaults to sqlite
+# engine = "sqlite"
+
 [ln]
 
-# Required ln backend `Cln`, `Ldk`, `Greenlight`
-ln_backend = "Cln"
+# Required ln backend `cln`, `ldk`, `greenlight`
+ln_backend = "cln"
 
 # CLN
 cln_path = "/tmp/cashu-rs-mint/lighting/ln_1/regtest/lightning-rpc"
