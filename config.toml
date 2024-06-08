@@ -4,7 +4,7 @@ listen_host = "127.0.0.1"
 listen_port = 8085
 mnemonic = "inner strategy nasty verify camp bind avoid cause glue holiday dress bounce exotic husband hungry winter diet town spray team number hen upper seek"
 max_order = 32
-db_path = "/tmp/cashu-rs-mint/mint.redb"
+db_path = "./mint.sqlite"
 last_pay_path = "/tmp/cashu-rs-mint/last_pay.txt"
 
 #[mint_info]

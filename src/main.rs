@@ -23,7 +23,7 @@ use cdk::nuts::{
     MintBolt11Request, MintBolt11Response, SwapRequest, SwapResponse, *,
 };
 use cdk::types::MintQuote;
-use cdk_redb::MintRedbDatabase;
+use cdk_sqlite::MintSqliteDatabase;
 use clap::Parser;
 use error::into_response;
 use futures::StreamExt;
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         None => settings.info.clone().db_path,
     };
 
-    let localstore = MintRedbDatabase::new(db_path.to_str().unwrap())?;
+    let localstore = MintSqliteDatabase::new(db_path.to_str().unwrap()).await?;
     let mint_info = MintInfo::default();
 
     let mnemonic = Mnemonic::from_str(&settings.info.mnemonic)?;
@@ -368,10 +368,12 @@ async fn post_melt_bolt11(
         .await
         .map_err(|_| StatusCode::NOT_ACCEPTABLE)?;
 
+    tracing::debug!("{:?}", quote);
+
     let pre = state
         .ln
         .ln_processor
-        .pay_invoice(Bolt11Invoice::from_str(&quote.request).unwrap(), None)
+        .pay_invoice(Bolt11Invoice::from_str(&quote.request).unwrap(), None, None)
         .await
         .unwrap();
 

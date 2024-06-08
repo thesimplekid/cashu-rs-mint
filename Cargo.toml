@@ -35,13 +35,14 @@ clap = { version = "4.3.14", features = ["env", "default", "derive"]}
 anyhow = "1.0.71"
 cdk = { git = "https://github.com/cashubtc/cdk", rev = "e1506c4", default-features = false, features = ["mint"] }
 cdk-redb = { git = "https://github.com/cashubtc/cdk", rev = "e1506c4", default-features = false, features = ["mint"] }
-# cdk = { path = "../../cdk/nut14/crates/cdk", default-features = false, features = ["mint", "all-nuts"] }
-# cdk-redb = { path = "../../cdk/nut14/crates/cdk-redb" }
+cdk-sqlite = { git = "https://github.com/cashubtc/cdk", rev = "e1506c4", default-features = false, features = ["mint"] }
+# cdk-sqlite = { path = "../../cdk/sql/crates/cdk-sqlite", default-features = false, features = ["mint"] }
+# cdk-redb = { path = "../../cdk/nut14/crates/cdk-redb", default-features = false, features = ["mint"]  }
 
 bitcoin = { version = "0.30.0", features = ["no-std"] }
 serde = "1.0.164"
 serde_json = "1.0.96"
 nostr = { version = "0.22.0", default-features = false }
 # ln-rs = { path = "../ln-rs/crates/ln-rs" }
-ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "629bfe4e", default-features = false, features = ["cln"] }
+ln-rs = { git = "https://github.com/thesimplekid/ln-rs", rev = "cbcc2a7", default-features = false, features = ["cln"] }
 url = "2.4.0"
