@@ -438,7 +438,7 @@ checksum = "96c51067fd44124faa7f870b4b1c969379ad32b2ba805aa959430ceaa384f695"
 [[package]]
 name = "cdk"
 version = "0.1.0"
-source = "git+https://github.com/cashubtc/cdk?rev=e1506c4#e1506c4e34b034235fc0ea44912f745e9866c934"
+source = "git+https://github.com/thesimplekid/cdk?branch=mpp#6239f896eaf9e01e68193925c98709d8433b4e65"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -462,7 +462,7 @@ dependencies = [
 [[package]]
 name = "cdk-redb"
 version = "0.1.0"
-source = "git+https://github.com/cashubtc/cdk?rev=e1506c4#e1506c4e34b034235fc0ea44912f745e9866c934"
+source = "git+https://github.com/thesimplekid/cdk?branch=mpp#6239f896eaf9e01e68193925c98709d8433b4e65"
 dependencies = [
  "async-trait",
  "cdk",
@@ -477,7 +477,7 @@ dependencies = [
 [[package]]
 name = "cdk-sqlite"
 version = "0.1.0"
-source = "git+https://github.com/cashubtc/cdk?rev=e1506c4#e1506c4e34b034235fc0ea44912f745e9866c934"
+source = "git+https://github.com/thesimplekid/cdk?branch=mpp#6239f896eaf9e01e68193925c98709d8433b4e65"
 dependencies = [
  "async-trait",
  "bitcoin 0.30.2",
