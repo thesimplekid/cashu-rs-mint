@@ -331,8 +331,12 @@ async fn get_melt_bolt11_quote(
     State(state): State<MintState>,
     Json(payload): Json<MeltQuoteBolt11Request>,
 ) -> Result<Json<MeltQuoteBolt11Response>, Response> {
-    let amount = payload.request.amount_milli_satoshis().unwrap() / 1000;
-    assert!(amount > 0);
+    let amount = match payload.options {
+        Some(mpp) => mpp.amount,
+        None => Amount::from(payload.request.amount_milli_satoshis().unwrap() / 1000),
+    };
+
+    assert!(amount > Amount::ZERO);
     let quote = state
         .mint
         .lock()
@@ -340,7 +344,7 @@ async fn get_melt_bolt11_quote(
         .new_melt_quote(
             payload.request.to_string(),
             payload.unit,
-            Amount::from(amount),
+            amount,
             Amount::ZERO,
             unix_time() + 1800,
         )
@@ -377,10 +381,29 @@ async fn post_melt_bolt11(
         .await
         .map_err(|_| StatusCode::NOT_ACCEPTABLE)?;
 
+    let invoice = Bolt11Invoice::from_str(&quote.request).unwrap();
+    let invoice_amount = ln_rs::Amount::from_msat(
+        Bolt11Invoice::from_str(&quote.request)
+            .unwrap()
+            .amount_milli_satoshis()
+            .unwrap(),
+    );
+
+    let partial_msat = match u64::from(invoice_amount) > u64::from(quote.amount) {
+        true => {
+            assert!(payload.proofs_amount() >= quote.amount);
+            Some(ln_rs::Amount::from_sat(u64::from(quote.amount)))
+        }
+        false => {
+            assert!(u64::from(payload.proofs_amount()) >= u64::from(invoice_amount));
+            None
+        }
+    };
+
     let pre = state
         .ln
         .ln_processor
-        .pay_invoice(Bolt11Invoice::from_str(&quote.request).unwrap(), None, None)
+        .pay_invoice(invoice, partial_msat, None)
         .await
         .unwrap();
 
