@@ -17,6 +17,7 @@
       let
         flakeboxLib = flakebox.lib.${system} { };
         pkgs = import nixpkgs { inherit system; };
+        bitcoind = pkgs.bitcoind.overrideDerivation (oldAttrs: { doCheck = false; doInstallCheck = false; });
 
         cashu_rs_mint_dir = "/tmp/cashu-rs-mint";
         bitcoin_dir = cashu_rs_mint_dir + "/bitcoin";
@@ -26,7 +27,7 @@
         devShells = flakeboxLib.mkShells {
           buildInputs = [
           pkgs.clightning
-          pkgs.bitcoind
+          bitcoind
           ];
         shellHook = ''
 
@@ -34,9 +35,9 @@
         mkdir -p ${bitcoin_dir}
         mkdir -p ${lightning_dir}
 
-        alias btc="bitcoin-cli -regtest -datadir=${bitcoin_dir}"
-        alias ln1="lightning-cli --lightning-dir=${lightning_dir}/ln_1 --regtest"
-        alias ln2="lightning-cli --lightning-dir=${lightning_dir}/ln_2 --regtest"
+        alias btc="${bitcoind}/bin/bitcoin-cli -regtest -datadir=${bitcoin_dir}"
+        alias ln1="${pkgs.clightning}/bin/lightning-cli --lightning-dir=${lightning_dir}/ln_1 --regtest"
+        alias ln2="${pkgs.clightning}/bin/lightning-cli --lightning-dir=${lightning_dir}/ln_2 --regtest"
 
 
         blockcount=$(btc getblockcount) || { blockcount=-1; }
