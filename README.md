@@ -1,3 +1,6 @@
+# Moved to https://github.com/cashubtc/cdk/tree/main/crates/cdk-mintd
+
+
 # cashu-rs-mint
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
